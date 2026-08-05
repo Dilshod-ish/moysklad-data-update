@@ -1,1 +1,53 @@
+name: MoySklad migratsiya
 
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run (hech narsa yozmaydi, faqat tekshiradi)"
+        type: boolean
+        default: true
+      only:
+        description: "Faqat shu turlarni ko'chirish (vergul bilan, bo'sh = hammasi). Masalan: uom,currency,store"
+        type: string
+        default: ""
+
+concurrency:
+  group: moysklad-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Kodni olish
+        uses: actions/checkout@v4
+
+      - name: Python o'rnatish
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Kutubxonalarni o'rnatish
+        run: pip install -r requirements.txt
+
+      - name: Migratsiyani ishga tushirish
+        env:
+          SOURCE_TOKEN: ${{ secrets.SOURCE_TOKEN }}
+          SOURCE_LOGIN: ${{ secrets.SOURCE_LOGIN }}
+          SOURCE_PASSWORD: ${{ secrets.SOURCE_PASSWORD }}
+          DEST_TOKEN: ${{ secrets.DEST_TOKEN }}
+          DEST_LOGIN: ${{ secrets.DEST_LOGIN }}
+          DEST_PASSWORD: ${{ secrets.DEST_PASSWORD }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          ARGS=()
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          if [ -n "$ONLY" ]; then
+            ARGS+=(--only "$ONLY")
+          fi
+          python main.py "${ARGS[@]}"
