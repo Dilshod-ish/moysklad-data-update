@@ -58,10 +58,17 @@ TOP_LEVEL_STRIP = {
 }
 
 # Ba'zi turlar uchun qo'shimcha maydonlar ham olib tashlanadi.
+_PRODUCT_LIKE_STRIP = {"code"}  # "code" (artikul) akkaunt bo'yicha yagona bo'lishi
+# shart, lekin manba ma'lumotida ko'plab mahsulotlar bo'sh yoki takrorlangan
+# "code"ga ega bo'lishi mumkin — shuning uchun uni ko'chirmaymiz.
 EXTRA_STRIP = {
     # Yangi akkauntning hisob (учётная) valyutasi kursi har doim 1 bo'lishi
     # shart — manbadan kursni ko'chirsak, MoySklad buni rad etadi.
     "currency": {"rate"},
+    "product": _PRODUCT_LIKE_STRIP,
+    "service": _PRODUCT_LIKE_STRIP,
+    "variant": _PRODUCT_LIKE_STRIP,
+    "bundle": _PRODUCT_LIKE_STRIP,
 }
 
 SUB_RESOURCE_STRIP = {"id", "accountId", "meta", "updated", "created"}
