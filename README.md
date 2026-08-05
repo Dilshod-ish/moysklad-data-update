@@ -10,8 +10,7 @@ JSON API orqali ko'chirish uchun skript.
 - Narx turlari (pricetype) — nomi bo'yicha moslashtiriladi
 - Bo'limlar (group/Отдел), xodimlar (employee)
 - Tashkilotlar / yuridik shaxslar (organization), ularning bank hisoblari
-- Tovar guruhlari (productfolder) va kontragent guruhlari (counterpartyfolder),
-  ierarxiyasi (ota-guruh) bilan birga
+- Tovar guruhlari (productfolder), ierarxiyasi (ota-guruh) bilan birga
 - Sklad (store)
 - Kontragentlar (counterparty), ularning bank hisoblari
 - Loyihalar (project), shartnomalar (contract)

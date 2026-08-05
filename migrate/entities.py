@@ -18,7 +18,6 @@ ENTITY_TYPES = [
     {"key": "employee", "path": "entity/employee"},
     {"key": "organization", "path": "entity/organization", "sub_resources": ["accounts"]},
     {"key": "productfolder", "path": "entity/productfolder", "self_referential": True},
-    {"key": "counterpartyfolder", "path": "entity/counterpartyfolder", "self_referential": True},
     {"key": "store", "path": "entity/store"},
     {
         "key": "counterparty",

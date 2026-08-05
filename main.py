@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(me
 def main():
     parser = argparse.ArgumentParser(
         description="MoySklad: bitta bazadagi spravochniklar (uom, currency, "
-        "productfolder, counterpartyfolder, store, counterparty, product, "
+        "productfolder, store, counterparty, product, "
         "service, variant, bundle, employee, organization, project, contract, "
         "custom fieldlar) va hujjatlarni (enter, loss, move, inventory, supply, "
         "demand, order, invoice, payment) API orqali boshqa bazaga ko'chiradi."
@@ -29,9 +29,12 @@ def main():
     only = set(args.only.split(",")) if args.only else None
 
     try:
-        run(only=only, dry_run=args.dry_run)
+        failed = run(only=only, dry_run=args.dry_run)
     except RuntimeError as exc:
         logging.error(str(exc))
+        sys.exit(1)
+
+    if failed:
         sys.exit(1)
 
 
