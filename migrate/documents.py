@@ -16,19 +16,33 @@ log = logging.getLogger("moysklad.documents")
 # demand/supply/invoice hujjatlariga havola qiladi ("operations").
 #
 # processingplan/processingorder/processing — "Производство" (texoperatsiya)
-# moduli hujjatlari. Bu turlar odatiy "positions" o'rniga "materials"/
-# "products" massivlaridan foydalanishi mumkin — bu holat ham xavfsiz
-# ishlaydi, chunki prepare_document_item faqat "positions" bo'lgandagina uni
-# alohida so'rov bilan yuklaydi, qolgan barcha ichki maydonlar (materials,
-# products va h.k.) umumiy resolve_refs orqali baribir to'g'ri bog'lanadi.
+# moduli hujjatlari. Ularda "positions" o'rniga "materials"/"products" kabi
+# alohida ro'yxatlar bor — bular ham "positions" kabi to'liq holda ro'yxat
+# so'rovida QAYTMAYDI (faqat hajmi bilan meta-havola qaytadi), shuning uchun
+# har biri uchun alohida sub-to'plam so'rovi kerak ("list_fields").
 DOCUMENT_TYPES = [
     {"key": "enter", "path": "entity/enter", "has_attributes": True},
     {"key": "loss", "path": "entity/loss", "has_attributes": True},
     {"key": "move", "path": "entity/move", "has_attributes": True},
     {"key": "inventory", "path": "entity/inventory", "has_attributes": False},
-    {"key": "processingplan", "path": "entity/processingplan", "has_attributes": False},
-    {"key": "processingorder", "path": "entity/processingorder", "has_attributes": True},
-    {"key": "processing", "path": "entity/processing", "has_attributes": True},
+    {
+        "key": "processingplan",
+        "path": "entity/processingplan",
+        "has_attributes": False,
+        "list_fields": ["materials", "products"],
+    },
+    {
+        "key": "processingorder",
+        "path": "entity/processingorder",
+        "has_attributes": True,
+        "list_fields": ["positions", "materials", "products"],
+    },
+    {
+        "key": "processing",
+        "path": "entity/processing",
+        "has_attributes": True,
+        "list_fields": ["materials", "products"],
+    },
     {"key": "purchaseorder", "path": "entity/purchaseorder", "has_attributes": True},
     {"key": "supply", "path": "entity/supply", "has_attributes": True},
     {"key": "purchasereturn", "path": "entity/purchasereturn", "has_attributes": True},
@@ -44,20 +58,27 @@ DOCUMENT_TYPES = [
 ]
 
 DOCUMENT_STRIP = TOP_LEVEL_STRIP | {"sum", "vatSum", "payedSum", "printed", "published"}
-POSITION_STRIP = {"id", "accountId", "meta"}
+# "pack" — pozitsiyada tanlangan aniq qadoq (упаковка) variantiga havola;
+# bu tovarning o'ziga (productga) emas, balki o'sha productning ICHKI,
+# akkauntga xos qadoq yozuviga ishora qiladi va globalda qayta topilmaydi
+# ("goodpack" turi), shuning uchun uni saqlab qolmaymiz.
+POSITION_STRIP = {"id", "accountId", "meta", "pack"}
 
 
-def fetch_positions(client, doc_type: str, doc_id: str) -> list:
-    rows = client.get_all(f"entity/{doc_type}/{doc_id}/positions")
+def fetch_list_field(client, doc_type: str, doc_id: str, field_name: str) -> list:
+    rows = client.get_all(f"entity/{doc_type}/{doc_id}/{field_name}")
     return [{k: v for k, v in row.items() if k not in POSITION_STRIP} for row in rows]
 
 
-def prepare_document_item(source_client, item: dict, doc_type: str, maps: dict) -> dict:
+def prepare_document_item(
+    source_client, item: dict, doc_type: str, maps: dict, list_fields=("positions",)
+) -> dict:
     cleaned = {k: v for k, v in item.items() if k not in DOCUMENT_STRIP}
     cleaned["externalCode"] = item["id"]
 
-    if "positions" in cleaned:
-        cleaned["positions"] = fetch_positions(source_client, doc_type, item["id"])
+    for field in list_fields:
+        if field in cleaned:
+            cleaned[field] = fetch_list_field(source_client, doc_type, item["id"], field)
 
     attrs = cleaned.pop("attributes", None)
     resolved = resolve_refs(cleaned, maps)
@@ -114,8 +135,9 @@ def migrate_document_type(source_client, dest_client, cfg: dict, maps: dict, dry
     if dry_run or not remaining:
         return
 
+    list_fields = cfg.get("list_fields", ["positions"])
     for item in remaining:
-        payload = prepare_document_item(source_client, item, key, maps)
+        payload = prepare_document_item(source_client, item, key, maps, list_fields=list_fields)
         try:
             created = dest_client.post(path, payload)
         except RuntimeError as exc:
