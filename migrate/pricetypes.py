@@ -1,14 +1,24 @@
 import logging
+import re
 
 log = logging.getLogger("moysklad.pricetypes")
+
+_RE_ID = re.compile(r"([0-9a-fA-F-]{36})(?:$|\?)")
 
 
 def migrate_price_types(source_client, dest_client, maps: dict, dry_run: bool = False):
     """Narx turlarini (Тип цены) nomi bo'yicha moslashtiradi; maqsad bazada
     yo'q bo'lganlarini yaratadi. product/counterparty dagi salePrices shu
-    orqali to'g'ri narx turiga bog'lanadi."""
+    orqali to'g'ri narx turiga bog'lanadi. Shu bilan birga maqsad bazaning
+    hisob (учётная) valyutasi ID'sini ham maps'ga yozadi — hujjatlarda shu
+    valyuta uchun kurs (rate) har doim 1 bo'lishi shart."""
     source_settings = source_client.get("context/companysettings")
     dest_settings = dest_client.get("context/companysettings")
+
+    dest_currency_href = (dest_settings.get("currency") or {}).get("meta", {}).get("href", "")
+    m = _RE_ID.search(dest_currency_href)
+    if m:
+        maps["base_currency_id"] = m.group(1)
 
     source_types = source_settings.get("priceTypes", [])
     dest_types = list(dest_settings.get("priceTypes", []))

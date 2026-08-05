@@ -2,7 +2,7 @@ import logging
 
 from .attributes import migrate_attributes, resolve_attribute_values
 from .entities import TOP_LEVEL_STRIP
-from .mapper import resolve_refs
+from .mapper import parse_meta_href, resolve_refs
 from .states import migrate_states
 
 log = logging.getLogger("moysklad.documents")
@@ -65,6 +65,17 @@ def prepare_document_item(source_client, item: dict, doc_type: str, maps: dict) 
         new_attrs = resolve_attribute_values(attrs, doc_type, maps)
         if new_attrs:
             resolved["attributes"] = new_attrs
+
+    # Maqsad bazaning hisob (учётная) valyutasi uchun kurs har doim 1
+    # bo'lishi shart — manbadan boshqacha qiymat kelsa, MoySklad rad etadi.
+    # Shu valyutaga tegishli bo'lsa, "rate"ni butunlay olib tashlaymiz —
+    # MoySklad avtomatik 1 deb oladi.
+    rate = resolved.get("rate")
+    if isinstance(rate, dict):
+        currency_href = ((rate.get("currency") or {}).get("meta") or {}).get("href", "")
+        parsed = parse_meta_href(currency_href)
+        if parsed and parsed[0] == "entity" and parsed[2] == maps.get("base_currency_id"):
+            resolved.pop("rate", None)
 
     return resolved
 

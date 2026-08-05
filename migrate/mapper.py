@@ -41,8 +41,13 @@ def resolve_refs(node, maps: dict):
     fayl/rasm va h.k.) shu maydonni butunlay tashlab yuboradi, chunki
     manba akkauntdagi ID lar maqsad akkauntda hech narsani anglatmaydi."""
     if isinstance(node, dict):
-        if set(node.keys()) == {"meta"}:
-            href = (node.get("meta") or {}).get("href", "")
+        # Ba'zi havolalar (masalan salePrices ichidagi priceType) faqat
+        # {"meta": ...} emas, balki qulaylik uchun "id"/"name" kabi qo'shimcha
+        # maydonlar bilan birga keladi — shuning uchun aniq bitta kalit emas,
+        # "meta" ichida href borligini tekshiramiz.
+        inner_meta = node.get("meta")
+        if isinstance(inner_meta, dict) and "href" in inner_meta:
+            href = inner_meta.get("href", "")
             parsed = parse_meta_href(href)
             if not parsed:
                 return DROP

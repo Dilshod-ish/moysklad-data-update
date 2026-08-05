@@ -7,7 +7,8 @@ JSON API orqali ko'chirish uchun skript.
 
 **Spravochniklar:**
 - Birliklar (uom), valyutalar (currency)
-- Narx turlari (pricetype) — nomi bo'yicha moslashtiriladi
+- Narx turlari (pricetype), pul mablag'lari harakati moddalari (expenditem) —
+  nomi bo'yicha moslashtiriladi
 - Bo'limlar (group/Отдел), xodimlar (employee)
 - Tashkilotlar / yuridik shaxslar (organization), ularning bank hisoblari
 - Tovar guruhlari (productfolder), ierarxiyasi (ota-guruh) bilan birga
@@ -104,6 +105,14 @@ python main.py --only demand,supply,paymentin,paymentout
 - Katta bazalarda avval `--only` bilan kichik bir turni sinab ko'rish
   tavsiya etiladi (masalan `--only uom,currency,store`), keyin to'liq
   migratsiyaga o'tish.
+- Yangi MoySklad akkaunti ba'zi standart elementlarni (birlik "шт", "Основной
+  склад" ombori, "Основной" bo'limi va h.k.) oldindan o'zi yaratib qo'yadi.
+  Skript `uom`, `currency`, `group`, `store`, `expenditem` turlari uchun
+  bunday nomdosh elementlarni avtomatik aniqlab, ularni qayta yaratmasdan
+  mavjudiga bog'laydi.
+- Maqsad bazaning hisob (учётная) valyutasi uchun hujjatlardagi kurs (rate)
+  har doim 1 bo'lishi shart — skript shu holatni avtomatik aniqlab, kerak
+  bo'lsa "rate" maydonini olib tashlaydi.
 
 ## Qayta ishga tushirish (idempotentlik)
 

@@ -11,14 +11,21 @@ log = logging.getLogger("moysklad.entities")
 # (ota-guruh) bog'lanishga ega, shuning uchun ular ikkinchi bosqichda
 # (yaratilgandan keyin) tuzatiladi. "sub_resources" — obyektga tegishli, alohida
 # sub-to'plam sifatida olinadigan ma'lumotlar (masalan, bank hisoblari).
+#
+# "match_by_name": True — MoySklad har bir yangi akkauntda ba'zi standart
+# elementlarni (birlik "шт", "Основной склад", "Основной" bo'lim va h.k.)
+# oldindan yaratib qo'yadi, ularning nomi manba bazadagi bilan bir xil
+# bo'lishi mumkin. Bu turlar uchun nom bo'yicha ham moslashtiramiz, aks
+# holda MoySklad "nom yagona bo'lishi kerak" xatosini beradi.
 ENTITY_TYPES = [
-    {"key": "uom", "path": "entity/uom"},
-    {"key": "currency", "path": "entity/currency"},
-    {"key": "group", "path": "entity/group"},
+    {"key": "uom", "path": "entity/uom", "match_by_name": True},
+    {"key": "currency", "path": "entity/currency", "match_by_name": True},
+    {"key": "group", "path": "entity/group", "match_by_name": True},
+    {"key": "expenditem", "path": "entity/expenditem", "match_by_name": True},
     {"key": "employee", "path": "entity/employee"},
     {"key": "organization", "path": "entity/organization", "sub_resources": ["accounts"]},
     {"key": "productfolder", "path": "entity/productfolder", "self_referential": True},
-    {"key": "store", "path": "entity/store"},
+    {"key": "store", "path": "entity/store", "match_by_name": True},
     {
         "key": "counterparty",
         "path": "entity/counterparty",
@@ -50,6 +57,13 @@ TOP_LEVEL_STRIP = {
     "version",
 }
 
+# Ba'zi turlar uchun qo'shimcha maydonlar ham olib tashlanadi.
+EXTRA_STRIP = {
+    # Yangi akkauntning hisob (учётная) valyutasi kursi har doim 1 bo'lishi
+    # shart — manbadan kursni ko'chirsak, MoySklad buni rad etadi.
+    "currency": {"rate"},
+}
+
 SUB_RESOURCE_STRIP = {"id", "accountId", "meta", "updated", "created"}
 
 
@@ -65,7 +79,8 @@ def build_maps() -> dict:
 
 
 def prepare_item(item: dict, entity_type: str, maps: dict) -> dict:
-    cleaned = {k: v for k, v in item.items() if k not in TOP_LEVEL_STRIP}
+    strip = TOP_LEVEL_STRIP | EXTRA_STRIP.get(entity_type, set())
+    cleaned = {k: v for k, v in item.items() if k not in strip}
     cleaned["externalCode"] = item["id"]
 
     attrs = cleaned.pop("attributes", None)
@@ -133,6 +148,8 @@ def migrate_entity_type(source_client, dest_client, cfg: dict, maps: dict, dry_r
 
     dest_items = dest_client.get_all(path)
     dest_by_ext = {d.get("externalCode"): d for d in dest_items if d.get("externalCode")}
+    match_by_name = cfg.get("match_by_name", False)
+    dest_by_name = {d["name"]: d for d in dest_items if d.get("name")} if match_by_name else {}
 
     if cfg.get("has_attributes") and not dry_run:
         migrate_attributes(source_client, dest_client, key, maps)
@@ -146,6 +163,8 @@ def migrate_entity_type(source_client, dest_client, cfg: dict, maps: dict, dry_r
     already = 0
     for item in source_items:
         existing = dest_by_ext.get(item["id"])
+        if not existing and match_by_name:
+            existing = dest_by_name.get(item.get("name"))
         if existing:
             id_map[item["id"]] = {"meta": existing["meta"]}
             dest_by_source[item["id"]] = existing
@@ -158,9 +177,14 @@ def migrate_entity_type(source_client, dest_client, cfg: dict, maps: dict, dry_r
         to_create = [(item["id"], prepare_item(item, key, maps)) for item in remaining]
         created = dest_client.bulk_create(path, [payload for _, payload in to_create])
         created_by_ext = {c.get("externalCode"): c for c in created if c.get("externalCode")}
+        # Ba'zi turlar (masalan currency) yaratilgan obyektda externalCode'ni
+        # aks ettirmasligi mumkin — nom bo'yicha ham urinib ko'ramiz.
+        created_by_name = {c["name"]: c for c in created if c.get("name")} if match_by_name else {}
 
-        for source_id, _ in to_create:
+        for source_id, payload in to_create:
             created_obj = created_by_ext.get(source_id)
+            if not created_obj and match_by_name:
+                created_obj = created_by_name.get(payload.get("name"))
             if created_obj:
                 id_map[source_id] = {"meta": created_obj["meta"]}
                 dest_by_source[source_id] = created_obj
