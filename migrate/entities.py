@@ -21,8 +21,8 @@ ENTITY_TYPES = [
     {"key": "uom", "path": "entity/uom", "match_by_name": True},
     {"key": "currency", "path": "entity/currency", "match_by_name": True},
     {"key": "group", "path": "entity/group", "match_by_name": True},
-    {"key": "expenditem", "path": "entity/expenditem", "match_by_name": True},
-    {"key": "employee", "path": "entity/employee"},
+    {"key": "expenseitem", "path": "entity/expenseitem", "match_by_name": True},
+    {"key": "employee", "path": "entity/employee", "match_by_name": True},
     {"key": "organization", "path": "entity/organization", "sub_resources": ["accounts"]},
     {"key": "productfolder", "path": "entity/productfolder", "self_referential": True},
     {"key": "store", "path": "entity/store", "match_by_name": True},
@@ -66,6 +66,18 @@ EXTRA_STRIP = {
 
 SUB_RESOURCE_STRIP = {"id", "accountId", "meta", "updated", "created"}
 
+# Ba'zi ichki (nested) ro'yxatlar o'zining "id"/"meta" o'ziga xos
+# identifikatorlariga ega (masalan, tovar qadoqlari — "packs"), bular yangi
+# obyekt yaratishda hech narsani anglatmaydi (server o'zi belgilaydi) va
+# manba akkauntga xos bo'lgani uchun MoySklad "topilmadi" deb rad etadi.
+# Shuning uchun faqat shu ikki maydonni olib tashlab, qolgan haqiqiy
+# ma'lumotni (masalan "uom", "barcodes") saqlab qolamiz.
+NESTED_STRIP = {
+    "product": {"packs": {"id", "meta"}},
+    "variant": {"packs": {"id", "meta"}},
+    "bundle": {"packs": {"id", "meta"}},
+}
+
 
 def build_maps() -> dict:
     return {
@@ -82,6 +94,15 @@ def prepare_item(item: dict, entity_type: str, maps: dict) -> dict:
     strip = TOP_LEVEL_STRIP | EXTRA_STRIP.get(entity_type, set())
     cleaned = {k: v for k, v in item.items() if k not in strip}
     cleaned["externalCode"] = item["id"]
+
+    for field, sub_strip in NESTED_STRIP.get(entity_type, {}).items():
+        rows = cleaned.get(field)
+        if isinstance(rows, list):
+            cleaned[field] = [
+                {k: v for k, v in row.items() if k not in sub_strip}
+                for row in rows
+                if isinstance(row, dict)
+            ]
 
     attrs = cleaned.pop("attributes", None)
     resolved = resolve_refs(cleaned, maps)
