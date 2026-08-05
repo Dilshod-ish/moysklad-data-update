@@ -11,17 +11,30 @@ log = logging.getLogger("moysklad.documents")
 # omborlar, kontragentlar, tashkilotlar, shartnomalar oldin ko'chirilgan
 # bo'lishi kerak (ENTITY_TYPES da). Buyurtmalar (order) yetkazib
 # berish/jo'natishlardan oldin turadi, chunki demand/supply ularga orqaga
-# havola qilishi mumkin. To'lov hujjatlari eng oxirida, chunki ular
+# havola qilishi mumkin. Qaytarishlar (return) o'zining asl hujjatidan
+# (supply/demand) keyin turadi. To'lov hujjatlari eng oxirida, chunki ular
 # demand/supply/invoice hujjatlariga havola qiladi ("operations").
+#
+# processingplan/processingorder/processing — "Производство" (texoperatsiya)
+# moduli hujjatlari. Bu turlar odatiy "positions" o'rniga "materials"/
+# "products" massivlaridan foydalanishi mumkin — bu holat ham xavfsiz
+# ishlaydi, chunki prepare_document_item faqat "positions" bo'lgandagina uni
+# alohida so'rov bilan yuklaydi, qolgan barcha ichki maydonlar (materials,
+# products va h.k.) umumiy resolve_refs orqali baribir to'g'ri bog'lanadi.
 DOCUMENT_TYPES = [
     {"key": "enter", "path": "entity/enter", "has_attributes": True},
     {"key": "loss", "path": "entity/loss", "has_attributes": True},
     {"key": "move", "path": "entity/move", "has_attributes": True},
     {"key": "inventory", "path": "entity/inventory", "has_attributes": False},
+    {"key": "processingplan", "path": "entity/processingplan", "has_attributes": False},
+    {"key": "processingorder", "path": "entity/processingorder", "has_attributes": True},
+    {"key": "processing", "path": "entity/processing", "has_attributes": True},
     {"key": "purchaseorder", "path": "entity/purchaseorder", "has_attributes": True},
     {"key": "supply", "path": "entity/supply", "has_attributes": True},
+    {"key": "purchasereturn", "path": "entity/purchasereturn", "has_attributes": True},
     {"key": "customerorder", "path": "entity/customerorder", "has_attributes": True},
     {"key": "demand", "path": "entity/demand", "has_attributes": True},
+    {"key": "salesreturn", "path": "entity/salesreturn", "has_attributes": True},
     {"key": "invoicein", "path": "entity/invoicein", "has_attributes": True},
     {"key": "invoiceout", "path": "entity/invoiceout", "has_attributes": True},
     {"key": "paymentin", "path": "entity/paymentin", "has_attributes": True},

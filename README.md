@@ -23,15 +23,20 @@ JSON API orqali ko'chirish uchun skript.
 **Hujjatlar** (xronologik tartibda, holatlari — status — bilan birga):
 - Oприходование (enter), Списание (loss), Перемещение (move), Инвентаризация
   (inventory)
-- Заказ поставщику (purchaseorder), Приемка (supply)
-- Заказ покупателя (customerorder), Отгрузка (demand)
+- Технологическая карта (processingplan), Заказ на производство
+  (processingorder), Texoperatsiya / Производство (processing)
+- Заказ поставщику (purchaseorder), Приемка (supply), Возврат поставщику
+  (purchasereturn)
+- Заказ покупателя (customerorder), Отгрузка (demand), Возврат покупателя
+  (salesreturn)
 - Счет поставщика (invoicein), Счет покупателю (invoiceout)
 - Входящий/исходящий платежи (paymentin, paymentout), ПКО/РКО (cashin,
   cashout) — bog'liq bank hisoblari va boshqa hujjatlarga havolalari bilan
 
 Tovar qoldiqlari (stock) alohida "sozlanmaydi" — ular yuqoridagi qoldiqqa
-ta'sir qiluvchi hujjatlar (enter, loss, move, inventory, supply, demand)
-to'liq ko'chirilgani natijasida maqsad bazada avtomatik hisoblanadi.
+ta'sir qiluvchi hujjatlar (enter, loss, move, inventory, processing, supply,
+demand, qaytarishlar) to'liq ko'chirilgani natijasida maqsad bazada
+avtomatik hisoblanadi.
 
 ## Nima ko'chirilmaydi (cheklovlar)
 
@@ -41,9 +46,10 @@ to'liq ko'chirilgani natijasida maqsad bazada avtomatik hisoblanadi.
   o'rnatib bo'lmaydi; xodim ma'lumotlari (ism, lavozim, aloqa) ko'chiriladi,
   lekin tizimga kirish uchun ularni yangi bazada qayta taklif qilish (invite)
   kerak bo'ladi.
-- Chakana savdo hujjatlari (retaildemand va h.k.), komissiya hisobotlari,
-  ishlab chiqarish/qayta ishlash hujjatlari — kamdan-kam ishlatiladigan va
-  murakkab turlar, hozircha kiritilmagan (kerak bo'lsa qo'shish mumkin).
+- Chakana savdo hujjatlari (retaildemand, retailsalesreturn va h.k. —
+  do'kon/kassa POS ulanishiga bog'liq), komissiya hisobotlari
+  (commissionreportin/out), ichki buyurtma (internalorder) — kamdan-kam
+  ishlatiladigan turlar, hozircha kiritilmagan (kerak bo'lsa qo'shish mumkin).
 - "file" turidagi custom fieldlar (qiymati fayl bo'lgani uchun).
 
 ## O'rnatish
@@ -107,3 +113,33 @@ yozadi. Shu orqali skriptni bir necha marta ishga tushirish xavfsiz —
 allaqachon ko'chirilgan elementlar qayta yaratilmaydi, faqat qolganlari
 qo'shiladi. Bu internet uzilishi yoki xatolik bo'lgan taqdirda qayta
 davom ettirish imkonini beradi.
+
+## GitHub Actions orqali ishga tushirish
+
+Skriptni o'z kompyuteringizda emas, GitHub'ning serverida ishga tushirish
+uchun `.github/workflows/migrate.yml` workflow qo'shilgan. U qo'lda
+(**Actions** bo'limidan) ishga tushiriladi — avtomatik jadval bo'yicha emas,
+chunki migratsiya odatda bir martalik amal.
+
+**Sozlash (bir marta):**
+
+1. Repozitoriyada **Settings → Secrets and variables → Actions → New
+   repository secret** bo'limiga kirib, quyidagi secret'larni qo'shing:
+   - `SOURCE_TOKEN` — eski (hozir ishlatilayotgan) baza API tokeni
+   - `DEST_TOKEN` — yangi baza API tokeni
+   - (token o'rniga login/parol ishlatmoqchi bo'lsangiz: `SOURCE_LOGIN`,
+     `SOURCE_PASSWORD`, `DEST_LOGIN`, `DEST_PASSWORD`)
+
+**Ishga tushirish:**
+
+1. GitHub'da repozitoriyaning **Actions** bo'limiga kiring.
+2. Chap tomondan **"MoySklad migratsiya"** workflow'ini tanlang.
+3. **"Run workflow"** tugmasini bosing.
+4. Avval `dry_run = true` bilan ishga tushirib, loglarda nechta element
+   ko'chirilishini tekshiring. Keyin `dry_run = false` qilib, haqiqiy
+   migratsiyani boshlang.
+5. Xohlasangiz, `only` maydoniga vergul bilan ajratilgan turlarni yozib,
+   faqat ularni ko'chirishingiz mumkin (masalan `uom,currency,store`).
+
+Ishlash jarayoni va xatoliklar workflow ishga tushgan sahifadagi loglarda
+ko'rinadi.
