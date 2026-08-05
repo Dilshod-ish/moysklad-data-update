@@ -1,1 +1,53 @@
+name: Hujjatlar vaqtini tartiblash
 
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run (hech narsa yozmaydi, faqat tekshiradi)"
+        type: boolean
+        default: true
+      only:
+        description: "Faqat shu turlarni tuzatish (vergul bilan, bo'sh = hammasi). Masalan: supply,demand"
+        type: string
+        default: ""
+
+concurrency:
+  group: moysklad-reschedule
+  cancel-in-progress: false
+
+jobs:
+  reschedule:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Kodni olish
+        uses: actions/checkout@v4
+
+      - name: Python o'rnatish
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Kutubxonalarni o'rnatish
+        run: pip install -r requirements.txt
+
+      - name: Hujjatlar vaqtini tartiblash
+        env:
+          SOURCE_TOKEN: ${{ secrets.SOURCE_TOKEN }}
+          SOURCE_LOGIN: ${{ secrets.SOURCE_LOGIN }}
+          SOURCE_PASSWORD: ${{ secrets.SOURCE_PASSWORD }}
+          DEST_TOKEN: ${{ secrets.DEST_TOKEN }}
+          DEST_LOGIN: ${{ secrets.DEST_LOGIN }}
+          DEST_PASSWORD: ${{ secrets.DEST_PASSWORD }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          ARGS=()
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          if [ -n "$ONLY" ]; then
+            ARGS+=(--only "$ONLY")
+          fi
+          python reschedule.py "${ARGS[@]}"
