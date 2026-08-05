@@ -108,22 +108,22 @@ class MoySkladClient:
         return created
 
     def bulk_update(self, path: str, items: list) -> list:
+        """Har bir elementni alohida, o'ziga xos manzilga (entity/{type}/{id})
+        PUT qiladi. MoySklad'ning to'plam (collection) manziliga guruh
+        PUT so'rovi (massiv ko'rinishida ham) "Не указан идентификатор
+        объекта" xatosini berdi — shuning uchun eng ishonchli yo'l: har bir
+        obyektni o'zining shaxsiy manziliga yuborish."""
         updated: list = []
-        for i in range(0, len(items), BATCH_SIZE):
-            chunk = items[i : i + BATCH_SIZE]
-            if not chunk:
+        for item in items:
+            item_id = item.get("id")
+            if not item_id:
+                href = (item.get("meta") or {}).get("href", "")
+                item_id = href.rstrip("/").rsplit("/", 1)[-1] if href else None
+            if not item_id:
+                log.error("Element yangilanmadi: id/meta topilmadi: %s", item)
                 continue
             try:
-                updated.extend(self.put(path, chunk))
+                updated.append(self.put(f"{path}/{item_id}", item))
             except RuntimeError as exc:
-                log.error("Batch yangilashda xato, elementlarni birma-bir urinamiz: %s", exc)
-                for item in chunk:
-                    try:
-                        updated.append(self.put(path, item))
-                    except RuntimeError as item_exc:
-                        log.error(
-                            "Element yangilanmadi (id=%s): %s",
-                            (item.get("meta") or {}).get("href"),
-                            item_exc,
-                        )
+                log.error("Element yangilanmadi (id=%s): %s", item_id, exc)
         return updated
