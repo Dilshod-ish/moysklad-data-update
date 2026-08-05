@@ -1,7 +1,7 @@
 import logging
 
 from .attributes import migrate_attributes, resolve_attribute_values
-from .mapper import payload_changed, resolve_refs
+from .mapper import parse_meta_href, payload_changed, resolve_refs
 
 log = logging.getLogger("moysklad.entities")
 
@@ -149,6 +149,19 @@ def migrate_sub_resource(
             # obyektlarga havola qilishi mumkin — shularni ham bog'laymiz.
             cleaned = resolve_refs(cleaned, maps)
             to_create.append(cleaned)
+
+    if sub_name == "accounts":
+        # MoySklad talabi: agar tashkilotda birorta ham hisob yo'q bo'lsa,
+        # chet el valyutasidagi hisobni to'g'ridan-to'g'ri yaratib
+        # bo'lmaydi — avval hisob (учётная) valyutasidagi hisob mavjud
+        # bo'lishi kerak. Shuning uchun hisob valyutasidagisini birinchi
+        # navbatda yaratamiz.
+        def _is_base_currency(account: dict) -> bool:
+            href = ((account.get("currency") or {}).get("meta") or {}).get("href", "")
+            parsed = parse_meta_href(href)
+            return bool(parsed and parsed[0] == "entity" and parsed[2] == maps.get("base_currency_id"))
+
+        to_create.sort(key=lambda a: not _is_base_currency(a))
 
     if to_create:
         created = dest_client.bulk_create(f"{parent_path}/{dest_parent_id}/{sub_name}", to_create)

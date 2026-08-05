@@ -165,3 +165,47 @@ chunki migratsiya odatda bir martalik amal.
 
 Ishlash jarayoni va xatoliklar workflow ishga tushgan sahifadagi loglarda
 ko'rinadi.
+
+## Hujjatlar vaqtini xronologik tartiblash (`reschedule.py`)
+
+Ko'chirishdan keyin bir kunda bir nechta turdagi hujjat bo'lsa (masalan
+o'sha kuni ham приемка, ham отгрузка), ularning **soati** manba
+bazadagi tasodifiy/original vaqtda qolishi mumkin — bu esa MoySklad'da
+qoldiq hisobini kunning ichida vaqtinchalik noto'g'ri ko'rsatishi mumkin
+(masalan tovar "kelishi"dan oldin "chiqib ketgandek" ko'rinishi). Bu
+skript **sanani saqlab**, faqat soatni hujjat turiga qarab quyidagi
+jadval bo'yicha to'g'irlaydi (yangi — DEST — bazada):
+
+| Vaqt | Hujjat turi |
+|---|---|
+| 06:00 | inventory (Инвентаризация) |
+| 06:30 | enter (Оприходование) |
+| 07:00 | purchaseorder |
+| 08:00 | supply (Приемка) |
+| 08:15 | invoicein |
+| 09:00 | purchasereturn |
+| 09:30 | move (Перемещение) |
+| 10:00 | processingplan / processingorder / processing |
+| 11:00 | customerorder |
+| 14:00 | paymentin / cashin |
+| 19:00 | loss (Списание) |
+| 21:00 | demand (Отгрузка) |
+| 21:15 | invoiceout |
+| 21:30 | salesreturn |
+| 22:00 | paymentout / cashout |
+
+Bir kunda bir xil turdagi bir nechta hujjat bo'lsa, ularning barchasi
+o'sha turning jadvaldagi vaqtiga o'tkaziladi (masalan barcha o'sha
+kungi `supply`lar 08:00ga).
+
+Ishga tushirish:
+
+```bash
+python reschedule.py --dry-run          # avval tekshirish
+python reschedule.py                    # haqiqiy tuzatish
+python reschedule.py --only supply,demand   # faqat ma'lum turlar
+```
+
+Yoki GitHub Actions'dan: **Actions → "Hujjatlar vaqtini tartiblash" →
+Run workflow**. Bu faqat DEST (yangi) bazaga yozadi, manba bazaga
+tegmaydi.
