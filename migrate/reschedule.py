@@ -50,7 +50,7 @@ def reschedule_type(client, doc_type: str, time_str: str, dry_run: bool = False)
     for item in items:
         new_moment = new_moment_for(item.get("moment", ""), time_str)
         if new_moment and new_moment != item.get("moment"):
-            updates.append({"meta": item["meta"], "moment": new_moment})
+            updates.append({"id": item["id"], "meta": item["meta"], "moment": new_moment})
 
     log.info("%s: %d ta hujjatdan %d tasi vaqti o'zgaradi", doc_type, len(items), len(updates))
 

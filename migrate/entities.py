@@ -246,11 +246,12 @@ def migrate_entity_type(
             log.info("%s: ierarxik (ota-guruh) bog'lanishlar tuzatilmoqda", key)
             updates = []
             for item in source_items:
-                dest_meta = id_map.get(item["id"])
-                if not dest_meta:
+                dest_obj = dest_by_source.get(item["id"])
+                if not dest_obj:
                     continue
                 payload = prepare_item(item, key, maps)
-                payload["meta"] = dest_meta["meta"]
+                payload["meta"] = dest_obj["meta"]
+                payload["id"] = dest_obj["id"]
                 updates.append(payload)
             if updates:
                 dest_client.bulk_update(path, updates)
@@ -265,6 +266,7 @@ def migrate_entity_type(
             payload = prepare_item(item, key, maps)
             if payload_changed(payload, existing):
                 payload["meta"] = existing["meta"]
+                payload["id"] = existing["id"]
                 updates.append(payload)
         if updates:
             dest_client.bulk_update(path, updates)
