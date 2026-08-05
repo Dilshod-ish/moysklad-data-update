@@ -35,40 +35,72 @@ def parse_meta_href(href: str):
     return None
 
 
+# Bular — havola qilingan obyektning o'zidagi qulaylik uchun ko'rsatiladigan
+# "ko'zgu" maydonlar (masalan priceType.name, uom.id). Bunday maydonlardan
+# boshqasi yo'q bo'lsa, dict butunlay HAVOLA deb hisoblanadi va yangi
+# meta bilan almashtiriladi. Lekin "operations" ichidagi kabi haqiqiy
+# ma'lumot (masalan "sum") bo'lsa — dict ENDI havola emas, balki o'z
+# ma'lumoti bilan havolani BIRGA saqlagan yozuv, shuning uchun faqat
+# "meta"ning o'zi almashtiriladi, qolgan maydonlar saqlab qolinadi.
+_MIRROR_KEYS = {"name", "id", "externalCode", "uuid", "code"}
+
+
+def _resolve_meta(inner_meta: dict, maps: dict):
+    """href'ga mos yangi meta'ni qaytaradi, topilmasa None."""
+    href = inner_meta.get("href", "")
+    parsed = parse_meta_href(href)
+    if not parsed:
+        return None
+    kind = parsed[0]
+    if kind == "entity":
+        _, type_, old_id = parsed
+        new_meta = maps["entity"].get(type_, {}).get(old_id)
+    elif kind == "customentity":
+        _, dict_id, elem_id = parsed
+        new_meta = maps["customentity"].get(dict_id, {}).get(elem_id)
+    elif kind == "state":
+        _, doc_type, old_id = parsed
+        new_meta = maps.get("state", {}).get(doc_type, {}).get(old_id)
+    elif kind == "account":
+        _, parent_type, parent_id, account_id = parsed
+        new_meta = maps.get("account", {}).get((parent_type, parent_id), {}).get(account_id)
+    else:
+        new_meta = None
+    return new_meta["meta"] if new_meta else None
+
+
 def resolve_refs(node, maps: dict):
     """Ichki obyektdagi barcha {"meta": {...}} havolalarni maqsad bazadagi mos
     obyektlarga almashtiradi. Mos topilmasa (masalan, biz ko'chirmaydigan tur:
     fayl/rasm va h.k.) shu maydonni butunlay tashlab yuboradi, chunki
     manba akkauntdagi ID lar maqsad akkauntda hech narsani anglatmaydi."""
     if isinstance(node, dict):
-        # Ba'zi havolalar (masalan salePrices ichidagi priceType) faqat
-        # {"meta": ...} emas, balki qulaylik uchun "id"/"name" kabi qo'shimcha
-        # maydonlar bilan birga keladi — shuning uchun aniq bitta kalit emas,
-        # "meta" ichida href borligini tekshiramiz.
         inner_meta = node.get("meta")
         if isinstance(inner_meta, dict) and "href" in inner_meta:
-            href = inner_meta.get("href", "")
-            parsed = parse_meta_href(href)
-            if not parsed:
+            other_keys = set(node.keys()) - {"meta"}
+
+            if other_keys <= _MIRROR_KEYS:
+                # Toza havola (masalan salePrices ichidagi priceType, uom) —
+                # butun dict yangi meta bilan almashtiriladi.
+                new_meta = _resolve_meta(inner_meta, maps)
+                return {"meta": new_meta} if new_meta else DROP
+
+            # Aralash yozuv (masalan to'lov hujjatidagi "operations" elementi:
+            # {"meta": ..., "sum": N}) — faqat "meta" almashtiriladi, qolgan
+            # haqiqiy ma'lumot (sum va h.k.) saqlanib qoladi. Havola hal
+            # qilinmasa, butun yozuv ma'nosiz bo'lib qoladi — shuning uchun
+            # butunlay tashlanadi.
+            new_meta = _resolve_meta(inner_meta, maps)
+            if not new_meta:
                 return DROP
-            kind = parsed[0]
-            if kind == "entity":
-                _, type_, old_id = parsed
-                new_meta = maps["entity"].get(type_, {}).get(old_id)
-                return {"meta": new_meta["meta"]} if new_meta else DROP
-            if kind == "customentity":
-                _, dict_id, elem_id = parsed
-                new_meta = maps["customentity"].get(dict_id, {}).get(elem_id)
-                return {"meta": new_meta["meta"]} if new_meta else DROP
-            if kind == "state":
-                _, doc_type, old_id = parsed
-                new_meta = maps.get("state", {}).get(doc_type, {}).get(old_id)
-                return {"meta": new_meta["meta"]} if new_meta else DROP
-            if kind == "account":
-                _, parent_type, parent_id, account_id = parsed
-                new_meta = maps.get("account", {}).get((parent_type, parent_id), {}).get(account_id)
-                return {"meta": new_meta["meta"]} if new_meta else DROP
-            return DROP
+            out = {"meta": new_meta}
+            for key, value in node.items():
+                if key == "meta" or key in _MIRROR_KEYS:
+                    continue
+                resolved = resolve_refs(value, maps)
+                if resolved is not DROP:
+                    out[key] = resolved
+            return out
 
         out = {}
         for key, value in node.items():

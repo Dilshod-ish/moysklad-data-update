@@ -107,6 +107,22 @@ def prepare_document_item(
         if parsed and parsed[0] == "entity" and parsed[2] == maps.get("base_currency_id"):
             resolved.pop("rate", None)
 
+    # To'lov hujjatlarida (paymentin/out, cashin/out) "operations" — to'lov
+    # qaysi hujjatlarga (demand/supply va h.k.) qanday summada taqsimlanganini
+    # ko'rsatadi. Ba'zan manba ma'lumotida taqsimot yig'indisi (yumaloqlash
+    # yoki tarixiy qayta hisoblashlar sabab) to'lovning o'z summasidan biroz
+    # oshib ketadi — MoySklad buni rad etadi. Shunday holatda taqsimotni
+    # to'lov summasiga mutanosib ravishda kamaytiramiz.
+    operations = resolved.get("operations")
+    payment_sum = resolved.get("sum")
+    if isinstance(operations, list) and isinstance(payment_sum, (int, float)) and payment_sum > 0:
+        allocated = sum(op.get("sum", 0) for op in operations if isinstance(op, dict))
+        if allocated > payment_sum:
+            scale = payment_sum / allocated
+            for op in operations:
+                if isinstance(op, dict) and "sum" in op:
+                    op["sum"] = round(op["sum"] * scale)
+
     return resolved
 
 
