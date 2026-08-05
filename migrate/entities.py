@@ -6,20 +6,32 @@ from .mapper import resolve_refs
 log = logging.getLogger("moysklad.entities")
 
 # Ko'chirish tartibi muhim: har bir tur o'zidan oldingi turlarga bog'liq bo'lishi
-# mumkin (masalan, product -> productfolder, uom). "self_referential" bo'lgan
-# turlar (papkalar) o'z-o'ziga (ota-guruh) bog'lanishga ega, shuning uchun ular
-# ikkinchi bosqichda (yaratilgandan keyin) tuzatiladi.
+# mumkin (masalan, product -> productfolder, uom; contract -> organization,
+# counterparty). "self_referential" bo'lgan turlar (papkalar) o'z-o'ziga
+# (ota-guruh) bog'lanishga ega, shuning uchun ular ikkinchi bosqichda
+# (yaratilgandan keyin) tuzatiladi. "sub_resources" — obyektga tegishli, alohida
+# sub-to'plam sifatida olinadigan ma'lumotlar (masalan, bank hisoblari).
 ENTITY_TYPES = [
-    {"key": "uom", "path": "entity/uom", "self_referential": False, "has_attributes": False},
-    {"key": "currency", "path": "entity/currency", "self_referential": False, "has_attributes": False},
-    {"key": "productfolder", "path": "entity/productfolder", "self_referential": True, "has_attributes": False},
-    {"key": "counterpartyfolder", "path": "entity/counterpartyfolder", "self_referential": True, "has_attributes": False},
-    {"key": "store", "path": "entity/store", "self_referential": False, "has_attributes": True},
-    {"key": "counterparty", "path": "entity/counterparty", "self_referential": False, "has_attributes": True},
-    {"key": "product", "path": "entity/product", "self_referential": False, "has_attributes": True},
-    {"key": "service", "path": "entity/service", "self_referential": False, "has_attributes": True},
-    {"key": "variant", "path": "entity/variant", "self_referential": False, "has_attributes": False},
-    {"key": "bundle", "path": "entity/bundle", "self_referential": False, "has_attributes": True},
+    {"key": "uom", "path": "entity/uom"},
+    {"key": "currency", "path": "entity/currency"},
+    {"key": "group", "path": "entity/group"},
+    {"key": "employee", "path": "entity/employee"},
+    {"key": "organization", "path": "entity/organization", "sub_resources": ["accounts"]},
+    {"key": "productfolder", "path": "entity/productfolder", "self_referential": True},
+    {"key": "counterpartyfolder", "path": "entity/counterpartyfolder", "self_referential": True},
+    {"key": "store", "path": "entity/store"},
+    {
+        "key": "counterparty",
+        "path": "entity/counterparty",
+        "has_attributes": True,
+        "sub_resources": ["accounts"],
+    },
+    {"key": "project", "path": "entity/project"},
+    {"key": "contract", "path": "entity/contract", "has_attributes": True},
+    {"key": "product", "path": "entity/product", "has_attributes": True},
+    {"key": "service", "path": "entity/service", "has_attributes": True},
+    {"key": "variant", "path": "entity/variant"},
+    {"key": "bundle", "path": "entity/bundle", "has_attributes": True},
 ]
 
 # Bular hisoblanadigan (read-only) yoki akkauntga xos tizim maydonlari —
@@ -39,9 +51,18 @@ TOP_LEVEL_STRIP = {
     "version",
 }
 
+SUB_RESOURCE_STRIP = {"id", "accountId", "meta", "updated", "created"}
+
 
 def build_maps() -> dict:
-    return {"entity": {}, "attribute": {}, "customentity": {}, "customentity_dict": {}}
+    return {
+        "entity": {},
+        "attribute": {},
+        "customentity": {},
+        "customentity_dict": {},
+        "state": {},
+        "account": {},
+    }
 
 
 def prepare_item(item: dict, entity_type: str, maps: dict) -> dict:
@@ -56,6 +77,47 @@ def prepare_item(item: dict, entity_type: str, maps: dict) -> dict:
             resolved["attributes"] = new_attrs
 
     return resolved
+
+
+def migrate_sub_resource(
+    source_client,
+    dest_client,
+    parent_path: str,
+    source_parent_id: str,
+    dest_parent_id: str,
+    sub_name: str,
+    maps: dict,
+):
+    """Ota obyektga tegishli sub-to'plamni (masalan, bank hisoblari)
+    manbadan maqsad obyektga ko'chiradi va (agar bank hisobi bo'lsa)
+    to'lov hujjatlarida foydalanish uchun id_map'ga yozadi."""
+    source_items = source_client.get_all(f"{parent_path}/{source_parent_id}/{sub_name}")
+    if not source_items:
+        return
+
+    dest_items = dest_client.get_all(f"{parent_path}/{dest_parent_id}/{sub_name}")
+    dest_by_ext = {d.get("externalCode"): d for d in dest_items if d.get("externalCode")}
+
+    to_create = []
+    for it in source_items:
+        if it["id"] not in dest_by_ext:
+            cleaned = {k: v for k, v in it.items() if k not in SUB_RESOURCE_STRIP}
+            cleaned["externalCode"] = it["id"]
+            to_create.append(cleaned)
+
+    if to_create:
+        created = dest_client.bulk_create(f"{parent_path}/{dest_parent_id}/{sub_name}", to_create)
+        for c in created:
+            if c.get("externalCode"):
+                dest_by_ext[c["externalCode"]] = c
+
+    if sub_name == "accounts":
+        parent_type = parent_path.rsplit("/", 1)[-1]
+        account_map = maps["account"].setdefault((parent_type, source_parent_id), {})
+        for it in source_items:
+            dest_item = dest_by_ext.get(it["id"])
+            if dest_item:
+                account_map[it["id"]] = {"meta": dest_item["meta"]}
 
 
 def migrate_entity_type(source_client, dest_client, cfg: dict, maps: dict, dry_run: bool = False):
@@ -76,39 +138,53 @@ def migrate_entity_type(source_client, dest_client, cfg: dict, maps: dict, dry_r
     if cfg.get("has_attributes") and not dry_run:
         migrate_attributes(source_client, dest_client, key, maps)
 
+    # dest_by_source: shu turdagi barcha manba elementlariga mos maqsad
+    # obyektlar (avvaldan mavjud + shu safar yaratilganlar birga) — bular
+    # sub-resurslarni (masalan, bank hisoblarini) qayta ishga tushirishlarda
+    # ham to'liq ko'chirish uchun kerak.
+    dest_by_source: dict = {}
+
     already = 0
     for item in source_items:
         existing = dest_by_ext.get(item["id"])
         if existing:
             id_map[item["id"]] = {"meta": existing["meta"]}
+            dest_by_source[item["id"]] = existing
             already += 1
 
     remaining = [item for item in source_items if item["id"] not in id_map]
     log.info("%s: %d ta allaqachon mavjud, %d ta yaratiladi", key, already, len(remaining))
 
-    if dry_run or not remaining:
-        return
+    if not dry_run and remaining:
+        to_create = [(item["id"], prepare_item(item, key, maps)) for item in remaining]
+        created = dest_client.bulk_create(path, [payload for _, payload in to_create])
+        created_by_ext = {c.get("externalCode"): c for c in created if c.get("externalCode")}
 
-    to_create = [(item["id"], prepare_item(item, key, maps)) for item in remaining]
-    created = dest_client.bulk_create(path, [payload for _, payload in to_create])
-    created_by_ext = {c.get("externalCode"): c for c in created if c.get("externalCode")}
+        for source_id, _ in to_create:
+            created_obj = created_by_ext.get(source_id)
+            if created_obj:
+                id_map[source_id] = {"meta": created_obj["meta"]}
+                dest_by_source[source_id] = created_obj
+            else:
+                log.error("%s: %s uchun natija topilmadi (yaratilmagan bo'lishi mumkin)", key, source_id)
 
-    for source_id, _ in to_create:
-        created_obj = created_by_ext.get(source_id)
-        if created_obj:
-            id_map[source_id] = {"meta": created_obj["meta"]}
-        else:
-            log.error("%s: %s uchun natija topilmadi (yaratilmagan bo'lishi mumkin)", key, source_id)
+        if cfg.get("self_referential"):
+            log.info("%s: ierarxik (ota-guruh) bog'lanishlar tuzatilmoqda", key)
+            updates = []
+            for item in source_items:
+                dest_meta = id_map.get(item["id"])
+                if not dest_meta:
+                    continue
+                payload = prepare_item(item, key, maps)
+                payload["meta"] = dest_meta["meta"]
+                updates.append(payload)
+            if updates:
+                dest_client.bulk_update(path, updates)
 
-    if cfg.get("self_referential"):
-        log.info("%s: ierarxik (ota-guruh) bog'lanishlar tuzatilmoqda", key)
-        updates = []
-        for item in source_items:
-            dest_meta = id_map.get(item["id"])
-            if not dest_meta:
-                continue
-            payload = prepare_item(item, key, maps)
-            payload["meta"] = dest_meta["meta"]
-            updates.append(payload)
-        if updates:
-            dest_client.bulk_update(path, updates)
+    if not dry_run:
+        for sub_name in cfg.get("sub_resources", []):
+            log.info("%s: sub-resurs '%s' ko'chirilmoqda", key, sub_name)
+            for source_id, dest_obj in dest_by_source.items():
+                migrate_sub_resource(
+                    source_client, dest_client, path, source_id, dest_obj["id"], sub_name, maps
+                )

@@ -4,11 +4,16 @@ DROP = object()
 
 _RE_CUSTOMENTITY = re.compile(r"/entity/customentity/([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})(?:$|\?)")
 _RE_ATTRIBUTE = re.compile(r"/entity/([a-zA-Z]+)/metadata/attributes/([0-9a-fA-F-]{36})(?:$|\?)")
+_RE_STATE = re.compile(r"/entity/([a-zA-Z]+)/metadata/states/([0-9a-fA-F-]{36})(?:$|\?)")
+_RE_ACCOUNT = re.compile(
+    r"/entity/(organization|counterparty)/([0-9a-fA-F-]{36})/accounts/([0-9a-fA-F-]{36})(?:$|\?)"
+)
 _RE_STANDARD = re.compile(r"/(?:entity|context/companysettings)/([a-zA-Z]+)/([0-9a-fA-F-]{36})(?:$|\?)")
 
 
 def parse_meta_href(href: str):
     """href'ni ('customentity', dict_id, element_id) / ('attribute', entity_type, attr_id) /
+    ('state', doc_type, state_id) / ('account', parent_type, parent_id, account_id) /
     ('entity', type, id) ko'rinishiga aylantiradi. Tanib bo'lmasa None qaytaradi."""
     if not href:
         return None
@@ -18,6 +23,12 @@ def parse_meta_href(href: str):
     m = _RE_ATTRIBUTE.search(href)
     if m:
         return ("attribute", m.group(1), m.group(2))
+    m = _RE_STATE.search(href)
+    if m:
+        return ("state", m.group(1), m.group(2))
+    m = _RE_ACCOUNT.search(href)
+    if m:
+        return ("account", m.group(1), m.group(2), m.group(3))
     m = _RE_STANDARD.search(href)
     if m:
         return ("entity", m.group(1), m.group(2))
@@ -27,7 +38,7 @@ def parse_meta_href(href: str):
 def resolve_refs(node, maps: dict):
     """Ichki obyektdagi barcha {"meta": {...}} havolalarni maqsad bazadagi mos
     obyektlarga almashtiradi. Mos topilmasa (masalan, biz ko'chirmaydigan tur:
-    xodim, holat, fayl va h.k.) shu maydonni butunlay tashlab yuboradi, chunki
+    fayl/rasm va h.k.) shu maydonni butunlay tashlab yuboradi, chunki
     manba akkauntdagi ID lar maqsad akkauntda hech narsani anglatmaydi."""
     if isinstance(node, dict):
         if set(node.keys()) == {"meta"}:
@@ -43,6 +54,14 @@ def resolve_refs(node, maps: dict):
             if kind == "customentity":
                 _, dict_id, elem_id = parsed
                 new_meta = maps["customentity"].get(dict_id, {}).get(elem_id)
+                return {"meta": new_meta["meta"]} if new_meta else DROP
+            if kind == "state":
+                _, doc_type, old_id = parsed
+                new_meta = maps.get("state", {}).get(doc_type, {}).get(old_id)
+                return {"meta": new_meta["meta"]} if new_meta else DROP
+            if kind == "account":
+                _, parent_type, parent_id, account_id = parsed
+                new_meta = maps.get("account", {}).get((parent_type, parent_id), {}).get(account_id)
                 return {"meta": new_meta["meta"]} if new_meta else DROP
             return DROP
 

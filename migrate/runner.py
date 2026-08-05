@@ -3,6 +3,7 @@ from typing import Optional
 
 from .client import MoySkladClient
 from .config import load_config
+from .documents import DOCUMENT_TYPES, migrate_document_type
 from .entities import ENTITY_TYPES, build_maps, migrate_entity_type
 from .pricetypes import migrate_price_types
 
@@ -22,6 +23,11 @@ def run(only: Optional[set] = None, dry_run: bool = False):
         if only and cfg["key"] not in only:
             continue
         migrate_entity_type(source_client, dest_client, cfg, maps, dry_run=dry_run)
+
+    for cfg in DOCUMENT_TYPES:
+        if only and cfg["key"] not in only:
+            continue
+        migrate_document_type(source_client, dest_client, cfg, maps, dry_run=dry_run)
 
     if dry_run:
         log.info("Dry-run yakunlandi — hech narsa yozilmadi.")

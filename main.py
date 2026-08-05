@@ -9,13 +9,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(me
 
 def main():
     parser = argparse.ArgumentParser(
-        description="MoySklad: bitta bazadagi spravochniklarni (uom, currency, "
+        description="MoySklad: bitta bazadagi spravochniklar (uom, currency, "
         "productfolder, counterpartyfolder, store, counterparty, product, "
-        "service, variant, bundle, custom field) API orqali boshqa bazaga ko'chiradi."
+        "service, variant, bundle, employee, organization, project, contract, "
+        "custom fieldlar) va hujjatlarni (enter, loss, move, inventory, supply, "
+        "demand, order, invoice, payment) API orqali boshqa bazaga ko'chiradi."
     )
     parser.add_argument(
         "--only",
-        help="Faqat shu turlarni ko'chirish, vergul bilan ajratib: masalan product,service",
+        help="Faqat shu turlarni ko'chirish, vergul bilan ajratib: masalan product,service,demand",
         default=None,
     )
     parser.add_argument(
