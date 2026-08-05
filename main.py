@@ -25,11 +25,21 @@ def main():
         action="store_true",
         help="Hech narsa yozmaydi, faqat necha ta element ko'chirilishini ko'rsatadi",
     )
+    parser.add_argument(
+        "--update-existing",
+        action="store_true",
+        help=(
+            "Ilgari ko'chirilgan (allaqachon mavjud) elementlarni ham qayta "
+            "tekshiradi va manba bazadagidan farq qilsa, maqsad bazadagisini "
+            "yangilaydi (masalan, kod yangilangandan keyin noto'g'ri "
+            "yaratilgan hujjatlarni tuzatish uchun)."
+        ),
+    )
     args = parser.parse_args()
     only = set(args.only.split(",")) if args.only else None
 
     try:
-        failed = run(only=only, dry_run=args.dry_run)
+        failed = run(only=only, dry_run=args.dry_run, update_existing=args.update_existing)
     except RuntimeError as exc:
         logging.error(str(exc))
         sys.exit(1)

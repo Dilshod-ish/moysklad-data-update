@@ -94,6 +94,20 @@ python main.py --only product,service,variant
 python main.py --only demand,supply,paymentin,paymentout
 ```
 
+Ilgari ko'chirilgan elementlarni ham qayta tekshirib, manba bazadagidan
+farq qilsa (masalan, kod yangilangandan keyin ba'zi hujjatlar noto'g'ri
+qiymat bilan yaratilgan bo'lsa) — maqsad bazadagisini yangilash:
+
+```bash
+python main.py --update-existing
+python main.py --update-existing --only cashin,cashout,paymentin,paymentout
+```
+
+Bu rejim har bir allaqachon mavjud elementni qayta hisoblab, maqsad
+bazadagisi bilan solishtiradi va farq bo'lsagina yangilaydi (`PUT`) —
+shuning uchun oddiy ishga tushirishga qaraganda sekinroq ishlaydi
+(hujjatlar uchun ularning pozitsiyalari qayta so'raladi).
+
 ## Muhim eslatmalar
 
 - Hujjatlar ko'p bo'lsa (minglab), migratsiya biroz vaqt oladi — har bir

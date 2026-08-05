@@ -87,3 +87,15 @@ def resolve_refs(node, maps: dict):
         return result
 
     return node
+
+
+def payload_changed(payload: dict, existing: dict) -> bool:
+    """Hisoblangan payload maqsad bazadagi mavjud obyektdan farq qiladimi
+    tekshiradi — faqat biz yozadigan maydonlar bo'yicha (dest'ning o'zi
+    qo'shgan qo'shimcha maydonlarga e'tibor berilmaydi)."""
+    for key, value in payload.items():
+        if key == "externalCode":
+            continue
+        if existing.get(key) != value:
+            return True
+    return False

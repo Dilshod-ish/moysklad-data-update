@@ -2,7 +2,7 @@ import logging
 
 from .attributes import migrate_attributes, resolve_attribute_values
 from .entities import TOP_LEVEL_STRIP
-from .mapper import parse_meta_href, resolve_refs
+from .mapper import parse_meta_href, payload_changed, resolve_refs
 from .states import migrate_states
 
 log = logging.getLogger("moysklad.documents")
@@ -57,7 +57,15 @@ DOCUMENT_TYPES = [
     {"key": "cashout", "path": "entity/cashout", "has_attributes": True},
 ]
 
-DOCUMENT_STRIP = TOP_LEVEL_STRIP | {"sum", "vatSum", "payedSum", "printed", "published"}
+DOCUMENT_STRIP = TOP_LEVEL_STRIP | {"printed", "published"}
+# "sum"/"vatSum" pozitsiyalardan (tovar qatorlaridan) hisoblanadigan
+# (computed) maydonlar — shuning uchun ular uchun olib tashlanadi.
+# Lekin to'lov hujjatlarida (paymentin/out, cashin/out) "sum" — bu HISOBLANMAYDI,
+# balki to'lovning o'zi (kiritilgan summa)! Uni olib tashlasak, MoySklad uni 0
+# deb oladi-yu, unga bog'langan "operations" summasi undan katta chiqib,
+# "распределенная сумма превышает сумму платежа" xatosini beradi.
+COMPUTED_SUM_STRIP = {"sum", "vatSum", "payedSum"}
+PAYMENT_DOC_TYPES = {"paymentin", "paymentout", "cashin", "cashout"}
 # "pack" — pozitsiyada tanlangan aniq qadoq (упаковка) variantiga havola;
 # bu tovarning o'ziga (productga) emas, balki o'sha productning ICHKI,
 # akkauntga xos qadoq yozuviga ishora qiladi va globalda qayta topilmaydi
@@ -73,7 +81,8 @@ def fetch_list_field(client, doc_type: str, doc_id: str, field_name: str) -> lis
 def prepare_document_item(
     source_client, item: dict, doc_type: str, maps: dict, list_fields=("positions",)
 ) -> dict:
-    cleaned = {k: v for k, v in item.items() if k not in DOCUMENT_STRIP}
+    strip = DOCUMENT_STRIP if doc_type in PAYMENT_DOC_TYPES else DOCUMENT_STRIP | COMPUTED_SUM_STRIP
+    cleaned = {k: v for k, v in item.items() if k not in strip}
     cleaned["externalCode"] = item["id"]
 
     for field in list_fields:
@@ -101,7 +110,9 @@ def prepare_document_item(
     return resolved
 
 
-def migrate_document_type(source_client, dest_client, cfg: dict, maps: dict, dry_run: bool = False):
+def migrate_document_type(
+    source_client, dest_client, cfg: dict, maps: dict, dry_run: bool = False, update_existing: bool = False
+):
     key = cfg["key"]
     path = cfg["path"]
     log.info("=== hujjat: %s ===", key)
@@ -121,18 +132,20 @@ def migrate_document_type(source_client, dest_client, cfg: dict, maps: dict, dry
     dest_items = dest_client.get_all(path)
     dest_by_ext = {d.get("externalCode"): d for d in dest_items if d.get("externalCode")}
 
+    already_items = []
     already = 0
     for item in source_items:
         existing = dest_by_ext.get(item["id"])
         if existing:
             id_map[item["id"]] = {"meta": existing["meta"]}
+            already_items.append(item)
             already += 1
 
     remaining = [item for item in source_items if item["id"] not in id_map]
     remaining.sort(key=lambda x: x.get("moment", ""))
     log.info("%s: %d ta allaqachon mavjud, %d ta yaratiladi", key, already, len(remaining))
 
-    if dry_run or not remaining:
+    if dry_run:
         return
 
     list_fields = cfg.get("list_fields", ["positions"])
@@ -144,3 +157,22 @@ def migrate_document_type(source_client, dest_client, cfg: dict, maps: dict, dry
             log.error("%s: hujjat yaratilmadi (id=%s, nomi=%s): %s", key, item["id"], item.get("name"), exc)
             continue
         id_map[item["id"]] = {"meta": created["meta"]}
+
+    if update_existing and already_items:
+        log.info("%s: %d ta mavjud hujjat o'zgarishlarga tekshirilmoqda", key, len(already_items))
+        updated_count = 0
+        for item in already_items:
+            existing = dest_by_ext.get(item["id"])
+            if not existing:
+                continue
+            payload = prepare_document_item(source_client, item, key, maps, list_fields=list_fields)
+            if payload_changed(payload, existing):
+                try:
+                    dest_client.put(f"{path}/{existing['id']}", payload)
+                    updated_count += 1
+                except RuntimeError as exc:
+                    log.error(
+                        "%s: hujjat yangilanmadi (id=%s, nomi=%s): %s", key, item["id"], item.get("name"), exc
+                    )
+        if updated_count:
+            log.info("%s: %d ta mavjud hujjat yangilandi", key, updated_count)

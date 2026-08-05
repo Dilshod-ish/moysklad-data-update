@@ -1,7 +1,7 @@
 import logging
 
 from .attributes import migrate_attributes, resolve_attribute_values
-from .mapper import resolve_refs
+from .mapper import payload_changed, resolve_refs
 
 log = logging.getLogger("moysklad.entities")
 
@@ -145,6 +145,9 @@ def migrate_sub_resource(
         if it["id"] not in dest_by_ext:
             cleaned = {k: v for k, v in it.items() if k not in SUB_RESOURCE_STRIP}
             cleaned["externalCode"] = it["id"]
+            # Bank hisobi kabi sub-resurslar ham valyuta kabi boshqa
+            # obyektlarga havola qilishi mumkin — shularni ham bog'laymiz.
+            cleaned = resolve_refs(cleaned, maps)
             to_create.append(cleaned)
 
     if to_create:
@@ -162,7 +165,9 @@ def migrate_sub_resource(
                 account_map[it["id"]] = {"meta": dest_item["meta"]}
 
 
-def migrate_entity_type(source_client, dest_client, cfg: dict, maps: dict, dry_run: bool = False):
+def migrate_entity_type(
+    source_client, dest_client, cfg: dict, maps: dict, dry_run: bool = False, update_existing: bool = False
+):
     key = cfg["key"]
     path = cfg["path"]
     log.info("=== %s ===", key)
@@ -187,6 +192,10 @@ def migrate_entity_type(source_client, dest_client, cfg: dict, maps: dict, dry_r
     # sub-resurslarni (masalan, bank hisoblarini) qayta ishga tushirishlarda
     # ham to'liq ko'chirish uchun kerak.
     dest_by_source: dict = {}
+    # already_items: bu safar YANGI yaratilmagan, ilgari yaratilgan/mos
+    # topilgan elementlar — faqat shular "yangilash" (update_existing)
+    # bosqichida qayta tekshiriladi.
+    already_items: list = []
 
     already = 0
     for item in source_items:
@@ -196,6 +205,7 @@ def migrate_entity_type(source_client, dest_client, cfg: dict, maps: dict, dry_r
         if existing:
             id_map[item["id"]] = {"meta": existing["meta"]}
             dest_by_source[item["id"]] = existing
+            already_items.append(item)
             already += 1
 
     remaining = [item for item in source_items if item["id"] not in id_map]
@@ -231,6 +241,21 @@ def migrate_entity_type(source_client, dest_client, cfg: dict, maps: dict, dry_r
                 updates.append(payload)
             if updates:
                 dest_client.bulk_update(path, updates)
+
+    if not dry_run and update_existing and already_items:
+        log.info("%s: %d ta mavjud element o'zgarishlarga tekshirilmoqda", key, len(already_items))
+        updates = []
+        for item in already_items:
+            existing = dest_by_source.get(item["id"])
+            if not existing:
+                continue
+            payload = prepare_item(item, key, maps)
+            if payload_changed(payload, existing):
+                payload["meta"] = existing["meta"]
+                updates.append(payload)
+        if updates:
+            dest_client.bulk_update(path, updates)
+            log.info("%s: %d ta mavjud element yangilandi", key, len(updates))
 
     if not dry_run:
         for sub_name in cfg.get("sub_resources", []):

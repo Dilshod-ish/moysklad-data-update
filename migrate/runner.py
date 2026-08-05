@@ -10,7 +10,7 @@ from .pricetypes import migrate_price_types
 log = logging.getLogger("moysklad.runner")
 
 
-def run(only: Optional[set] = None, dry_run: bool = False):
+def run(only: Optional[set] = None, dry_run: bool = False, update_existing: bool = False):
     source_creds, dest_creds = load_config()
     source_client = MoySkladClient(source_creds)
     dest_client = MoySkladClient(dest_creds)
@@ -29,7 +29,9 @@ def run(only: Optional[set] = None, dry_run: bool = False):
         if only and cfg["key"] not in only:
             continue
         try:
-            migrate_entity_type(source_client, dest_client, cfg, maps, dry_run=dry_run)
+            migrate_entity_type(
+                source_client, dest_client, cfg, maps, dry_run=dry_run, update_existing=update_existing
+            )
         except Exception as exc:  # noqa: BLE001
             log.error("%s: turi ko'chirilmadi, keyingisiga o'tiladi: %s", cfg["key"], exc)
             failed.append(cfg["key"])
@@ -38,7 +40,9 @@ def run(only: Optional[set] = None, dry_run: bool = False):
         if only and cfg["key"] not in only:
             continue
         try:
-            migrate_document_type(source_client, dest_client, cfg, maps, dry_run=dry_run)
+            migrate_document_type(
+                source_client, dest_client, cfg, maps, dry_run=dry_run, update_existing=update_existing
+            )
         except Exception as exc:  # noqa: BLE001
             log.error("%s: turi ko'chirilmadi, keyingisiga o'tiladi: %s", cfg["key"], exc)
             failed.append(cfg["key"])
