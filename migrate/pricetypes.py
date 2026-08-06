@@ -9,9 +9,13 @@ _RE_ID = re.compile(r"([0-9a-fA-F-]{36})(?:$|\?)")
 def migrate_price_types(source_client, dest_client, maps: dict, dry_run: bool = False):
     """Narx turlarini (Тип цены) nomi bo'yicha moslashtiradi; maqsad bazada
     yo'q bo'lganlarini yaratadi. product/counterparty dagi salePrices shu
-    orqali to'g'ri narx turiga bog'lanadi. Shu bilan birga maqsad bazaning
-    hisob (учётная) valyutasi ID'sini ham maps'ga yozadi — hujjatlarda shu
-    valyuta uchun kurs (rate) har doim 1 bo'lishi shart."""
+    orqali to'g'ri narx turiga bog'lanadi. Shu bilan birga maqsad va manba
+    bazalarning hisob (учётная) valyutasi ID'larini ham maps'ga yozadi:
+    - "base_currency_id" (maqsad bazaniki) — hujjatlarda shu valyuta uchun
+      kurs (rate) har doim 1 bo'lishi shart.
+    - "source_base_currency_id" (manba bazaniki) — valyuta spravochnigini
+      ko'chirishda faqat shu valyutaning "rate"i olib tashlanadi, qolgan
+      (chet el) valyutalarning kursi saqlab qolinadi."""
     source_settings = source_client.get("context/companysettings")
     dest_settings = dest_client.get("context/companysettings")
 
@@ -19,6 +23,11 @@ def migrate_price_types(source_client, dest_client, maps: dict, dry_run: bool = 
     m = _RE_ID.search(dest_currency_href)
     if m:
         maps["base_currency_id"] = m.group(1)
+
+    source_currency_href = (source_settings.get("currency") or {}).get("meta", {}).get("href", "")
+    m = _RE_ID.search(source_currency_href)
+    if m:
+        maps["source_base_currency_id"] = m.group(1)
 
     source_types = source_settings.get("priceTypes", [])
     dest_types = list(dest_settings.get("priceTypes", []))

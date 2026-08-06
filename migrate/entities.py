@@ -62,9 +62,6 @@ _PRODUCT_LIKE_STRIP = {"code"}  # "code" (artikul) akkaunt bo'yicha yagona bo'li
 # shart, lekin manba ma'lumotida ko'plab mahsulotlar bo'sh yoki takrorlangan
 # "code"ga ega bo'lishi mumkin — shuning uchun uni ko'chirmaymiz.
 EXTRA_STRIP = {
-    # Yangi akkauntning hisob (учётная) valyutasi kursi har doim 1 bo'lishi
-    # shart — manbadan kursni ko'chirsak, MoySklad buni rad etadi.
-    "currency": {"rate"},
     "product": _PRODUCT_LIKE_STRIP,
     "service": _PRODUCT_LIKE_STRIP,
     "variant": _PRODUCT_LIKE_STRIP,
@@ -103,6 +100,14 @@ def prepare_item(item: dict, entity_type: str, maps: dict, dest_client=None) -> 
     strip = TOP_LEVEL_STRIP | EXTRA_STRIP.get(entity_type, set())
     cleaned = {k: v for k, v in item.items() if k not in strip}
     cleaned["externalCode"] = item["id"]
+
+    # Manba bazaning O'ZINING hisob (учётная) valyutasi uchun kurs har doim 1
+    # bo'lishi shart — maqsad bazada bu valyuta ham hisob valyutasi bo'lib
+    # qoladi, shuning uchun "rate"ni olib tashlaymiz (MoySklad boshqacha
+    # qiymatni rad etadi). Boshqa (chet el) valyutalarning kursi esa
+    # saqlanadi — hisobot skriptlari "rate.currency.rate"ga tayanishi mumkin.
+    if entity_type == "currency" and item["id"] == maps.get("source_base_currency_id"):
+        cleaned.pop("rate", None)
 
     for field, sub_strip in NESTED_STRIP.get(entity_type, {}).items():
         rows = cleaned.get(field)

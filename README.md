@@ -131,6 +131,12 @@ shuning uchun oddiy ishga tushirishga qaraganda sekinroq ishlaydi
 - Maqsad bazaning hisob (учётная) valyutasi uchun hujjatlardagi kurs (rate)
   har doim 1 bo'lishi shart — skript shu holatni avtomatik aniqlab, kerak
   bo'lsa "rate" maydonini olib tashlaydi.
+- Valyutalar (currency) spravochnigi ko'chirilganda ham xuddi shunday: faqat
+  manba bazaning O'ZINING hisob (учётная) valyutasi uchun "rate" olib
+  tashlanadi (chunki maqsad bazada ham u hisob valyutasi bo'lib qoladi va
+  kursi majburiy 1). Boshqa (chet el) valyutalarning kursi esa to'liq
+  saqlanadi — shu orqali `currency.rate` maydoniga tayanadigan hisobot
+  skriptlari to'g'ri ishlashda davom etadi.
 
 ## Qayta ishga tushirish (idempotentlik)
 
