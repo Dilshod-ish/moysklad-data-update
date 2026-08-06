@@ -221,3 +221,27 @@ python reschedule.py --only supply,demand   # faqat ma'lum turlar
 Yoki GitHub Actions'dan: **Actions → "Hujjatlar vaqtini tartiblash" →
 Run workflow**. Bu faqat DEST (yangi) bazaga yozadi, manba bazaga
 tegmaydi.
+
+## Ikkalasini birga: migratsiya + vaqtni tartiblash (`migrate-and-reschedule.yml`)
+
+Yuqoridagi ikkita workflow'ni ("MoySklad migratsiya" va "Hujjatlar
+vaqtini tartiblash") qo'lda birin-ketin ishga tushirish o'rniga, bitta
+workflow orqali ham qilish mumkin: **Actions → "MoySklad migratsiya +
+vaqtni tartiblash" → Run workflow**. U avval eski bazadan hujjatlarni
+o'qib yangi bazaga ko'chiradi (1-bosqich, `main.py`), so'ng — muvaffaqiyatli
+tugasa — darhol o'sha yangi bazadagi hujjatlarning vaqtini xronologik
+jadval bo'yicha to'g'irlaydi (2-bosqich, `reschedule.py`).
+
+Maydonlar:
+- `dry_run` — ikkala bosqich uchun ham amal qiladi.
+- `only` — 1-bosqich (migratsiya) uchun turlarni cheklaydi.
+- `update_existing` — 1-bosqich uchun, ilgari ko'chirilganlarni ham tekshirish.
+- `run_reschedule` — 2-bosqichni butunlay o'chirib qo'yish uchun (`false`
+  qilsangiz, faqat migratsiya bajariladi).
+- `reschedule_only` — 2-bosqich (vaqtni tartiblash) uchun hujjat turlarini
+  cheklaydi, `only`dan mustaqil.
+
+Agar 1-bosqich (migratsiya) xatolik bilan to'xtasa, 2-bosqich (vaqtni
+tartiblash) avtomatik ishga tushmaydi — GitHub Actions'ning odatiy
+xatti-harakati shunday (oldingi qadam muvaffaqiyatsiz bo'lsa, keyingisi
+o'tkazib yuboriladi).
