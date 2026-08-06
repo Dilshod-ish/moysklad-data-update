@@ -9,27 +9,27 @@ _RE_DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
 # o'zgarmaydi — faqat shu sanadagi vaqt shu jadvalga moslashtiriladi.
 # Mantiq: avval tovar keladi (ombor to'ladi), keyin ishlab chiqariladi,
 # kun oxirida sotiladi/chiqariladi — shunda qoldiq hech qachon vaqtinchalik
-# "manfiy" bo'lib ko'rinmaydi.
+# "manfiy" bo'lib ko'rinmaydi. Barcha vaqtlar 06:00–21:00 oralig'ida.
 TIME_SCHEDULE = {
     "inventory": "06:00",
     "enter": "06:30",
     "purchaseorder": "07:00",
-    "supply": "08:00",
-    "invoicein": "08:15",
-    "purchasereturn": "09:00",
-    "move": "09:30",
-    "processingplan": "10:00",
-    "processingorder": "10:00",
-    "processing": "10:00",
-    "customerorder": "11:00",
-    "paymentin": "14:00",
-    "cashin": "14:00",
-    "loss": "19:00",
-    "demand": "21:00",
-    "invoiceout": "21:15",
-    "salesreturn": "21:30",
-    "paymentout": "22:00",
-    "cashout": "22:00",
+    "supply": "07:30",
+    "invoicein": "07:45",
+    "purchasereturn": "08:00",
+    "move": "08:15",
+    "processingplan": "08:30",
+    "processingorder": "08:30",
+    "processing": "08:30",
+    "customerorder": "09:00",
+    "paymentin": "10:00",
+    "cashin": "10:00",
+    "loss": "13:00",
+    "demand": "18:00",
+    "invoiceout": "18:15",
+    "salesreturn": "18:30",
+    "paymentout": "20:00",
+    "cashout": "20:00",
 }
 
 

@@ -181,18 +181,20 @@ jadval bo'yicha to'g'irlaydi (yangi — DEST — bazada):
 | 06:00 | inventory (Инвентаризация) |
 | 06:30 | enter (Оприходование) |
 | 07:00 | purchaseorder |
-| 08:00 | supply (Приемка) |
-| 08:15 | invoicein |
-| 09:00 | purchasereturn |
-| 09:30 | move (Перемещение) |
-| 10:00 | processingplan / processingorder / processing |
-| 11:00 | customerorder |
-| 14:00 | paymentin / cashin |
-| 19:00 | loss (Списание) |
-| 21:00 | demand (Отгрузка) |
-| 21:15 | invoiceout |
-| 21:30 | salesreturn |
-| 22:00 | paymentout / cashout |
+| 07:30 | supply (Приемка) |
+| 07:45 | invoicein |
+| 08:00 | purchasereturn |
+| 08:15 | move (Перемещение) |
+| 08:30 | processingplan / processingorder / processing |
+| 09:00 | customerorder |
+| 10:00 | paymentin / cashin |
+| 13:00 | loss (Списание) |
+| 18:00 | demand (Отгрузка) |
+| 18:15 | invoiceout |
+| 18:30 | salesreturn |
+| 20:00 | paymentout / cashout |
+
+Barcha vaqtlar 06:00–21:00 oralig'ida.
 
 Bir kunda bir xil turdagi bir nechta hujjat bo'lsa, ularning barchasi
 o'sha turning jadvaldagi vaqtiga o'tkaziladi (masalan barcha o'sha
