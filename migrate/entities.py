@@ -170,6 +170,30 @@ def migrate_sub_resource(
 
         to_create.sort(key=lambda a: not _is_base_currency(a))
 
+        # Agar hisob (учётная) valyutadagi hisob DEST'da hali umuman yo'q
+        # (na avvaldan mavjud, na shu safar yaratilayotganlar orasida) —
+        # MoySklad chet el valyutasidagi hisoblarni ham rad etadi ("хотя бы
+        # один из расчетных счетов должен быть в валюте учета"). Bunday
+        # holatda manba tashkilotning o'zida hisob valyutasidagi hisob
+        # umuman yo'q demakdir — API darajasida chetlab o'tib bo'lmaydi,
+        # shuning uchun urinib, N ta bir xil xatoni chiqarish o'rniga bitta
+        # aniq tushuntirish bilan o'tkazib yuboramiz.
+        has_base_anywhere = any(_is_base_currency(a) for a in to_create) or any(
+            _is_base_currency(d) for d in dest_items
+        )
+        if to_create and maps.get("base_currency_id") and not has_base_anywhere:
+            log.warning(
+                "%s (id=%s): hisob (учётная) valyutadagi bank hisobi manbada yo'q, "
+                "shuning uchun uning %d ta chet el valyutasidagi hisobi ko'chirilmadi "
+                "(MoySklad kamida bitta hisob valyutasidagi hisobni talab qiladi). "
+                "Tuzatish uchun MoySklad'da qo'lda shu tashkilot uchun hisob "
+                "valyutasida bitta hisob yarating, so'ng skriptni qayta ishga tushiring.",
+                parent_path.rsplit("/", 1)[-1],
+                dest_parent_id,
+                len(to_create),
+            )
+            to_create = []
+
     if to_create:
         created = dest_client.bulk_create(f"{parent_path}/{dest_parent_id}/{sub_name}", to_create)
         for c in created:

@@ -58,18 +58,26 @@ def migrate_customentity_dict(source_client, dest_client, dict_id: str, dict_nam
 
 
 def get_or_create_customentity_dict_by_name(dest_client, dict_name: str, maps: dict, cache_key=None):
-    """Maqsad bazada nomi bo'yicha customentity lug'atini topadi yoki
-    yaratadi. cache_key berilmasa, nomning o'zi kalit sifatida ishlatiladi
-    (manba lug'ati ID'si noma'lum/buzilgan bo'lgan holatlar uchun)."""
+    """Nomi bo'yicha customentity lug'atini shu ishga tushirish (run)
+    doirasida keshlab, kerak bo'lsa yaratadi.
+
+    MUHIM: MoySklad API'da barcha lug'atlarni ro'yxat qiladigan ishonchli
+    endpoint yo'q — bare "GET /entity/customentity" haqiqiy hisobda
+    "Не указан идентификатор объекта" (1012) xatosini berishi aniqlandi.
+    Shuning uchun qidirish o'rniga faqat shu ishga tushirish davomidagi
+    xotiradagi keshga tayanamiz: bitta ishga tushirishda bir nechta
+    hujjat turi bitta lug'atga muhtoj bo'lsa (masalan "Статья поступлений"
+    ham paymentin, ham cashin uchun), ular shu kesh orqali bitta lug'atni
+    ishlatadi. Ishga tushirishlar orasidagi (masalan --update-existing bilan
+    qayta ishga tushirishdagi) idempotentlik esa custom fieldning o'zi
+    (attribute) DEST'da allaqachon mavjud bo'lsa, uning o'z (endi to'g'ri)
+    customEntityMeta'si orqali ta'minlanadi — qarang: _register_attribute_dict."""
     key = cache_key if cache_key is not None else f"name:{dict_name}"
     if key in maps["customentity_dict"]:
         return maps["customentity_dict"][key]
 
-    dest_dicts = dest_client.get_all("entity/customentity")
-    dest_dict = next((d for d in dest_dicts if d["name"] == dict_name), None)
-    if not dest_dict:
-        dest_dict = dest_client.post("entity/customentity", {"name": dict_name})
-        log.info("Yangi customentity lug'at yaratildi: %s", dict_name)
+    dest_dict = dest_client.post("entity/customentity", {"name": dict_name})
+    log.info("Yangi customentity lug'at yaratildi: %s", dict_name)
     maps["customentity_dict"][key] = dest_dict
     return dest_dict
 
@@ -114,7 +122,7 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
         if existing:
             attr_map[attr["id"]] = existing
             if attr_type == "customentity":
-                _register_attribute_dict(source_client, dest_client, attr, maps)
+                _register_attribute_dict(source_client, dest_client, attr, maps, dest_attr=existing)
             continue
 
         payload = {
@@ -138,11 +146,24 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
         attr_map[attr["id"]] = created_attr
 
 
-def _register_attribute_dict(source_client, dest_client, attr: dict, maps: dict):
+def _register_attribute_dict(source_client, dest_client, attr: dict, maps: dict, dest_attr: dict = None):
     """customentity turidagi custom field uchun maqsad lug'atni aniqlaydi
     va maps["attribute_dict"][attr_id] ga yozadi — bu keyinroq, agar
     biror hujjatning qiymat havolasi buzilgan bo'lsa, nom bo'yicha
-    tiklash uchun ishlatiladi."""
+    tiklash uchun ishlatiladi.
+
+    dest_attr — agar shu custom field DEST bazada allaqachon mavjud bo'lsa
+    (masalan qayta ishga tushirishda), uning o'z customEntityMeta'si
+    beriladi. Bu har doim to'g'ri (DEST'ning o'zida yaratilgan), manba
+    (source) havolasining buzilgan-buzilmaganidan qat'i nazar — shunday
+    qilib bir xil lug'at qayta-qayta yaratilmaydi."""
+    dest_href = ((dest_attr or {}).get("customEntityMeta") or {}).get("href", "")
+    dm = _RE_CUSTOMENTITY_DICT.search(dest_href)
+    if dm:
+        dest_dict = {"id": dm.group(1), "meta": dest_attr["customEntityMeta"]}
+        maps["attribute_dict"][attr["id"]] = dest_dict
+        return dest_dict
+
     dict_href = (attr.get("customEntityMeta") or {}).get("href", "")
     m = _RE_CUSTOMENTITY_DICT.search(dict_href)
     if m:
