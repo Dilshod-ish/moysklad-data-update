@@ -1,1 +1,97 @@
+name: MoySklad migratsiya + vaqtni tartiblash
 
+# Ikkita alohida workflow'ni ("MoySklad migratsiya" va "Hujjatlar vaqtini
+# tartiblash") bitta ishga tushirishda ketma-ket bajaradi: avval eski
+# bazadan hujjatlar o'qilib yangi bazaga ko'chiriladi, so'ng darhol o'sha
+# yangi bazadagi hujjatlarning vaqti xronologik jadval bo'yicha
+# to'g'irlanadi — ikkita workflow'ni qo'lda birin-ketin ishga tushirish
+# shart bo'lmaydi.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run (hech narsa yozmaydi, faqat tekshiradi) — ikkala bosqich uchun ham"
+        type: boolean
+        default: true
+      only:
+        description: "Migratsiya uchun: faqat shu turlarni ko'chirish (vergul bilan, bo'sh = hammasi). Masalan: uom,currency,store"
+        type: string
+        default: ""
+      update_existing:
+        description: "Ilgari ko'chirilgan elementlarni ham qayta tekshirib, o'zgargan bo'lsa yangilash"
+        type: boolean
+        default: false
+      run_reschedule:
+        description: "Migratsiyadan keyin hujjatlar vaqtini ham tartiblash"
+        type: boolean
+        default: true
+      reschedule_only:
+        description: "Vaqtni tartiblash uchun: faqat shu hujjat turlari (vergul bilan, bo'sh = hammasi). Masalan: supply,demand"
+        type: string
+        default: ""
+
+concurrency:
+  group: moysklad-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate-and-reschedule:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Kodni olish
+        uses: actions/checkout@v4
+
+      - name: Python o'rnatish
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Kutubxonalarni o'rnatish
+        run: pip install -r requirements.txt
+
+      - name: 1-bosqich — Migratsiyani ishga tushirish
+        env:
+          SOURCE_TOKEN: ${{ secrets.SOURCE_TOKEN }}
+          SOURCE_LOGIN: ${{ secrets.SOURCE_LOGIN }}
+          SOURCE_PASSWORD: ${{ secrets.SOURCE_PASSWORD }}
+          DEST_TOKEN: ${{ secrets.DEST_TOKEN }}
+          DEST_LOGIN: ${{ secrets.DEST_LOGIN }}
+          DEST_PASSWORD: ${{ secrets.DEST_PASSWORD }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ONLY: ${{ inputs.only }}
+          UPDATE_EXISTING: ${{ inputs.update_existing }}
+        run: |
+          ARGS=()
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          if [ -n "$ONLY" ]; then
+            ARGS+=(--only "$ONLY")
+          fi
+          if [ "$UPDATE_EXISTING" = "true" ]; then
+            ARGS+=(--update-existing)
+          fi
+          python main.py "${ARGS[@]}"
+
+      - name: 2-bosqich — Hujjatlar vaqtini tartiblash
+        if: ${{ inputs.run_reschedule }}
+        env:
+          SOURCE_TOKEN: ${{ secrets.SOURCE_TOKEN }}
+          SOURCE_LOGIN: ${{ secrets.SOURCE_LOGIN }}
+          SOURCE_PASSWORD: ${{ secrets.SOURCE_PASSWORD }}
+          DEST_TOKEN: ${{ secrets.DEST_TOKEN }}
+          DEST_LOGIN: ${{ secrets.DEST_LOGIN }}
+          DEST_PASSWORD: ${{ secrets.DEST_PASSWORD }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ONLY: ${{ inputs.reschedule_only }}
+        run: |
+          ARGS=()
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          if [ -n "$ONLY" ]; then
+            ARGS+=(--only "$ONLY")
+          fi
+          python reschedule.py "${ARGS[@]}"
