@@ -18,7 +18,11 @@ JSON API orqali ko'chirish uchun skript.
 - Tovarlar, xizmatlar, modifikatsiyalar, komplektlar (product, service,
   variant, bundle)
 - Custom fieldlar (dopolnitelnie polya), shu jumladan "customentity" turidagi
-  (foydalanuvchi lug'ati) custom fieldlar va ularning qiymatlari
+  (foydalanuvchi lug'ati) custom fieldlar va ularning qiymatlari. Agar manba
+  bazada lug'atning o'zi (masalan o'chirilgan bo'lgani uchun) havolasi
+  buzilgan bo'lsa ham, skript qiymatning ko'rinadigan nomi orqali maqsad
+  bazada mos lug'at/elementni topadi yoki yaratadi — shunday qilib qiymat
+  yo'qolmaydi.
 
 **Hujjatlar** (xronologik tartibda, holatlari — status — bilan birga):
 - Oприходование (enter), Списание (loss), Перемещение (move), Инвентаризация

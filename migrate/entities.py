@@ -90,14 +90,16 @@ def build_maps() -> dict:
     return {
         "entity": {},
         "attribute": {},
+        "attribute_dict": {},
         "customentity": {},
         "customentity_dict": {},
+        "customentity_by_name": {},
         "state": {},
         "account": {},
     }
 
 
-def prepare_item(item: dict, entity_type: str, maps: dict) -> dict:
+def prepare_item(item: dict, entity_type: str, maps: dict, dest_client=None) -> dict:
     strip = TOP_LEVEL_STRIP | EXTRA_STRIP.get(entity_type, set())
     cleaned = {k: v for k, v in item.items() if k not in strip}
     cleaned["externalCode"] = item["id"]
@@ -114,7 +116,7 @@ def prepare_item(item: dict, entity_type: str, maps: dict) -> dict:
     attrs = cleaned.pop("attributes", None)
     resolved = resolve_refs(cleaned, maps)
     if attrs:
-        new_attrs = resolve_attribute_values(attrs, entity_type, maps)
+        new_attrs = resolve_attribute_values(attrs, entity_type, maps, dest_client=dest_client)
         if new_attrs:
             resolved["attributes"] = new_attrs
 
@@ -225,7 +227,7 @@ def migrate_entity_type(
     log.info("%s: %d ta allaqachon mavjud, %d ta yaratiladi", key, already, len(remaining))
 
     if not dry_run and remaining:
-        to_create = [(item["id"], prepare_item(item, key, maps)) for item in remaining]
+        to_create = [(item["id"], prepare_item(item, key, maps, dest_client=dest_client)) for item in remaining]
         created = dest_client.bulk_create(path, [payload for _, payload in to_create])
         created_by_ext = {c.get("externalCode"): c for c in created if c.get("externalCode")}
         # Ba'zi turlar (masalan currency) yaratilgan obyektda externalCode'ni
@@ -249,7 +251,7 @@ def migrate_entity_type(
                 dest_obj = dest_by_source.get(item["id"])
                 if not dest_obj:
                     continue
-                payload = prepare_item(item, key, maps)
+                payload = prepare_item(item, key, maps, dest_client=dest_client)
                 payload["meta"] = dest_obj["meta"]
                 payload["id"] = dest_obj["id"]
                 updates.append(payload)
@@ -263,7 +265,7 @@ def migrate_entity_type(
             existing = dest_by_source.get(item["id"])
             if not existing:
                 continue
-            payload = prepare_item(item, key, maps)
+            payload = prepare_item(item, key, maps, dest_client=dest_client)
             if payload_changed(payload, existing):
                 payload["meta"] = existing["meta"]
                 payload["id"] = existing["id"]

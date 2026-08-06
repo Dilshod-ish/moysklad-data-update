@@ -25,12 +25,7 @@ def migrate_customentity_dict(source_client, dest_client, dict_id: str, dict_nam
     if dict_id in maps["customentity_dict"]:
         return maps["customentity_dict"][dict_id], maps["customentity"].setdefault(dict_id, {})
 
-    dest_dicts = dest_client.get_all("entity/customentity")
-    dest_dict = next((d for d in dest_dicts if d["name"] == dict_name), None)
-    if not dest_dict:
-        dest_dict = dest_client.post("entity/customentity", {"name": dict_name})
-        log.info("Yangi customentity lug'at yaratildi: %s", dict_name)
-    maps["customentity_dict"][dict_id] = dest_dict
+    dest_dict = get_or_create_customentity_dict_by_name(dest_client, dict_name, maps, cache_key=dict_id)
 
     ce_map = maps["customentity"].setdefault(dict_id, {})
     source_elements = source_client.get_all(f"entity/customentity/{dict_id}")
@@ -54,7 +49,48 @@ def migrate_customentity_dict(source_client, dest_client, dict_id: str, dict_nam
         else:
             log.error("customentity elementi ko'chirilmadi: %s / %s", dict_name, el["name"])
 
+    # Nomlar keshini ham to'ldiramiz — endi qiymatlarni nom bo'yicha
+    # tiklash kerak bo'lsa (masalan buzilgan havolalar uchun), qayta
+    # so'rov yubormasdan shu yerdan foydalanish mumkin.
+    maps["customentity_by_name"][dest_dict["id"]] = dest_by_name
+
     return dest_dict, ce_map
+
+
+def get_or_create_customentity_dict_by_name(dest_client, dict_name: str, maps: dict, cache_key=None):
+    """Maqsad bazada nomi bo'yicha customentity lug'atini topadi yoki
+    yaratadi. cache_key berilmasa, nomning o'zi kalit sifatida ishlatiladi
+    (manba lug'ati ID'si noma'lum/buzilgan bo'lgan holatlar uchun)."""
+    key = cache_key if cache_key is not None else f"name:{dict_name}"
+    if key in maps["customentity_dict"]:
+        return maps["customentity_dict"][key]
+
+    dest_dicts = dest_client.get_all("entity/customentity")
+    dest_dict = next((d for d in dest_dicts if d["name"] == dict_name), None)
+    if not dest_dict:
+        dest_dict = dest_client.post("entity/customentity", {"name": dict_name})
+        log.info("Yangi customentity lug'at yaratildi: %s", dict_name)
+    maps["customentity_dict"][key] = dest_dict
+    return dest_dict
+
+
+def get_or_create_customentity_element_by_name(dest_client, dest_dict: dict, element_name: str, maps: dict):
+    """dest_dict ichida nomi bo'yicha elementni topadi yoki yaratadi.
+    Manba elementining ID'si noma'lum bo'lgan (havolasi buzilgan)
+    hollarda — faqat ko'rinadigan nomi asosida — ishlatiladi."""
+    cache = maps["customentity_by_name"].get(dest_dict["id"])
+    if cache is None:
+        elements = dest_client.get_all(f"entity/customentity/{dest_dict['id']}")
+        cache = {e["name"]: e for e in elements}
+        maps["customentity_by_name"][dest_dict["id"]] = cache
+
+    existing = cache.get(element_name)
+    if existing:
+        return existing
+
+    created = dest_client.post(f"entity/customentity/{dest_dict['id']}", {"name": element_name})
+    cache[element_name] = created
+    return created
 
 
 def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict):
@@ -77,6 +113,8 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
         existing = dest_by_name.get(attr["name"])
         if existing:
             attr_map[attr["id"]] = existing
+            if attr_type == "customentity":
+                _register_attribute_dict(source_client, dest_client, attr, maps)
             continue
 
         payload = {
@@ -88,14 +126,7 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
             payload["showOnUi"] = attr["showOnUi"]
 
         if attr_type == "customentity":
-            dict_href = (attr.get("customEntityMeta") or {}).get("href", "")
-            m = _RE_CUSTOMENTITY_DICT.search(dict_href)
-            if not m:
-                log.error("customentity lug'ati topilmadi: %s", attr["name"])
-                continue
-            dest_dict, _ce_map = migrate_customentity_dict(
-                source_client, dest_client, m.group(1), attr["name"], maps
-            )
+            dest_dict = _register_attribute_dict(source_client, dest_client, attr, maps)
             payload["customEntityMeta"] = dest_dict["meta"]
 
         try:
@@ -107,7 +138,29 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
         attr_map[attr["id"]] = created_attr
 
 
-def resolve_attribute_values(attrs: list, entity_type: str, maps: dict) -> list:
+def _register_attribute_dict(source_client, dest_client, attr: dict, maps: dict):
+    """customentity turidagi custom field uchun maqsad lug'atni aniqlaydi
+    va maps["attribute_dict"][attr_id] ga yozadi — bu keyinroq, agar
+    biror hujjatning qiymat havolasi buzilgan bo'lsa, nom bo'yicha
+    tiklash uchun ishlatiladi."""
+    dict_href = (attr.get("customEntityMeta") or {}).get("href", "")
+    m = _RE_CUSTOMENTITY_DICT.search(dict_href)
+    if m:
+        dest_dict, _ce_map = migrate_customentity_dict(source_client, dest_client, m.group(1), attr["name"], maps)
+    else:
+        # Manba lug'ati havolasi buzilgan (masalan lug'at o'chirilgan) —
+        # baribir hujjat qiymatlarida ko'rinadigan nom mavjud bo'ladi,
+        # shuning uchun nom bo'yicha lug'at yaratamiz/topamiz.
+        log.warning(
+            "customentity lug'ati havolasi buzilgan: %s — qiymatlar nom bo'yicha tiklanadi",
+            attr["name"],
+        )
+        dest_dict = get_or_create_customentity_dict_by_name(dest_client, attr["name"], maps)
+    maps["attribute_dict"][attr["id"]] = dest_dict
+    return dest_dict
+
+
+def resolve_attribute_values(attrs: list, entity_type: str, maps: dict, dest_client=None) -> list:
     attr_map = maps["attribute"].get(entity_type, {})
     result = []
     for attr in attrs or []:
@@ -115,7 +168,8 @@ def resolve_attribute_values(attrs: list, entity_type: str, maps: dict) -> list:
         m = _RE_ATTR_META.search(href)
         if not m:
             continue
-        new_attr = attr_map.get(m.group(1))
+        attr_id = m.group(1)
+        new_attr = attr_map.get(attr_id)
         if not new_attr:
             continue
 
@@ -123,12 +177,20 @@ def resolve_attribute_values(attrs: list, entity_type: str, maps: dict) -> list:
         if isinstance(value, dict) and "meta" in value:
             vhref = (value.get("meta") or {}).get("href", "")
             dm = _RE_CUSTOMENTITY_VALUE.search(vhref)
-            if not dm:
-                continue
-            new_val = maps["customentity"].get(dm.group(1), {}).get(dm.group(2))
-            if not new_val:
-                continue
-            value = {"meta": new_val["meta"], "name": value.get("name")}
+            new_val = maps["customentity"].get(dm.group(1), {}).get(dm.group(2)) if dm else None
+
+            if new_val:
+                value = {"meta": new_val["meta"], "name": value.get("name")}
+            else:
+                # Qiymatning havolasi buzilgan yoki topilmadi — lekin ko'rinadigan
+                # nomi (value.name) hali ham mavjud bo'lishi mumkin. Shu nom
+                # bo'yicha maqsad lug'atdan mos elementni topamiz/yaratamiz.
+                elem_name = value.get("name")
+                dest_dict = maps["attribute_dict"].get(attr_id)
+                if not elem_name or not dest_dict or not dest_client:
+                    continue
+                dest_elem = get_or_create_customentity_element_by_name(dest_client, dest_dict, elem_name, maps)
+                value = {"meta": dest_elem["meta"], "name": elem_name}
 
         result.append({"meta": new_attr["meta"], "value": value})
     return result

@@ -79,7 +79,7 @@ def fetch_list_field(client, doc_type: str, doc_id: str, field_name: str) -> lis
 
 
 def prepare_document_item(
-    source_client, item: dict, doc_type: str, maps: dict, list_fields=("positions",)
+    source_client, item: dict, doc_type: str, maps: dict, list_fields=("positions",), dest_client=None
 ) -> dict:
     strip = DOCUMENT_STRIP if doc_type in PAYMENT_DOC_TYPES else DOCUMENT_STRIP | COMPUTED_SUM_STRIP
     cleaned = {k: v for k, v in item.items() if k not in strip}
@@ -92,7 +92,7 @@ def prepare_document_item(
     attrs = cleaned.pop("attributes", None)
     resolved = resolve_refs(cleaned, maps)
     if attrs:
-        new_attrs = resolve_attribute_values(attrs, doc_type, maps)
+        new_attrs = resolve_attribute_values(attrs, doc_type, maps, dest_client=dest_client)
         if new_attrs:
             resolved["attributes"] = new_attrs
 
@@ -166,7 +166,9 @@ def migrate_document_type(
 
     list_fields = cfg.get("list_fields", ["positions"])
     for item in remaining:
-        payload = prepare_document_item(source_client, item, key, maps, list_fields=list_fields)
+        payload = prepare_document_item(
+            source_client, item, key, maps, list_fields=list_fields, dest_client=dest_client
+        )
         try:
             created = dest_client.post(path, payload)
         except RuntimeError as exc:
@@ -181,7 +183,9 @@ def migrate_document_type(
             existing = dest_by_ext.get(item["id"])
             if not existing:
                 continue
-            payload = prepare_document_item(source_client, item, key, maps, list_fields=list_fields)
+            payload = prepare_document_item(
+                source_client, item, key, maps, list_fields=list_fields, dest_client=dest_client
+            )
             if payload_changed(payload, existing):
                 try:
                     dest_client.put(f"{path}/{existing['id']}", payload)
