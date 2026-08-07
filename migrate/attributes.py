@@ -61,25 +61,56 @@ def get_or_create_customentity_dict_by_name(dest_client, dict_name: str, maps: d
     """Nomi bo'yicha customentity lug'atini shu ishga tushirish (run)
     doirasida keshlab, kerak bo'lsa yaratadi.
 
-    MUHIM: MoySklad API'da barcha lug'atlarni ro'yxat qiladigan ishonchli
-    endpoint yo'q — bare "GET /entity/customentity" haqiqiy hisobda
-    "Не указан идентификатор объекта" (1012) xatosini berishi aniqlandi.
-    Shuning uchun qidirish o'rniga faqat shu ishga tushirish davomidagi
-    xotiradagi keshga tayanamiz: bitta ishga tushirishda bir nechta
-    hujjat turi bitta lug'atga muhtoj bo'lsa (masalan "Статья поступлений"
-    ham paymentin, ham cashin uchun), ular shu kesh orqali bitta lug'atni
-    ishlatadi. Ishga tushirishlar orasidagi (masalan --update-existing bilan
-    qayta ishga tushirishdagi) idempotentlik esa custom fieldning o'zi
+    Avval to'g'ridan-to'g'ri yaratishga (POST) urinamiz — chunki barcha
+    lug'atlarni ro'yxat qiladigan "GET /entity/customentity" (bare)
+    so'rovi haqiqiy hisobda "Не указан идентификатор объекта" (1012)
+    xatosini berishi aniqlangan, shuning uchun ehtiyotkorlik uchun uni
+    oldindan CHAQIRMAYMIZ. Lekin agar DEST'da shu nomdagi lug'at
+    ALLAQACHON mavjud bo'lsa (masalan boshqa, buzilmagan havolali
+    entity type orqali oldinroq yaratilgan bo'lsa), MoySklad "nom yagona
+    bo'lishi kerak" (3006) xatosini beradi — aynan shu holatda, endi
+    haqiqatan ham kerak bo'lgani uchun, ro'yxat so'rovini urinib ko'ramiz
+    (agar u ham ishlamasa, aniq xato bilan to'xtaymiz).
+
+    Ishga tushirishlar orasidagi (masalan --update-existing bilan qayta
+    ishga tushirishdagi) idempotentlik esa custom fieldning o'zi
     (attribute) DEST'da allaqachon mavjud bo'lsa, uning o'z (endi to'g'ri)
     customEntityMeta'si orqali ta'minlanadi — qarang: _register_attribute_dict."""
     key = cache_key if cache_key is not None else f"name:{dict_name}"
     if key in maps["customentity_dict"]:
         return maps["customentity_dict"][key]
 
-    dest_dict = dest_client.post("entity/customentity", {"name": dict_name})
-    log.info("Yangi customentity lug'at yaratildi: %s", dict_name)
+    try:
+        dest_dict = dest_client.post("entity/customentity", {"name": dict_name})
+        log.info("Yangi customentity lug'at yaratildi: %s", dict_name)
+    except RuntimeError as exc:
+        if "3006" not in str(exc) and "уникальности" not in str(exc):
+            raise
+        dest_dict = _find_customentity_dict_by_name(dest_client, dict_name)
+        if not dest_dict:
+            raise
+        log.info("DEST'da allaqachon mavjud customentity lug'at topildi: %s", dict_name)
+
     maps["customentity_dict"][key] = dest_dict
     return dest_dict
+
+
+def _find_customentity_dict_by_name(dest_client, dict_name: str):
+    """"entity/customentity" ro'yxatidan nomi bo'yicha lug'atni qidiradi.
+    Faqat get_or_create_customentity_dict_by_name lug'at ALLAQACHON
+    DEST'da mavjudligini (nom to'qnashuvi xatosi orqali) aniqlagandan
+    keyingina chaqiriladi."""
+    try:
+        dest_dicts = dest_client.get_all("entity/customentity")
+    except RuntimeError as exc:
+        log.error(
+            "customentity lug'atlari ro'yxati olinmadi: %s — '%s' nomli lug'at DEST'da "
+            "allaqachon mavjud (nom to'qnashuvi xatosi), lekin uni topib bo'lmadi.",
+            exc,
+            dict_name,
+        )
+        return None
+    return next((d for d in dest_dicts if d["name"] == dict_name), None)
 
 
 def get_or_create_customentity_element_by_name(dest_client, dest_dict: dict, element_name: str, maps: dict):
