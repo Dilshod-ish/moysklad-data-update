@@ -96,21 +96,38 @@ def get_or_create_customentity_dict_by_name(dest_client, dict_name: str, maps: d
 
 
 def _find_customentity_dict_by_name(dest_client, dict_name: str):
-    """"entity/customentity" ro'yxatidan nomi bo'yicha lug'atni qidiradi.
-    Faqat get_or_create_customentity_dict_by_name lug'at ALLAQACHON
-    DEST'da mavjudligini (nom to'qnashuvi xatosi orqali) aniqlagandan
-    keyingina chaqiriladi."""
-    try:
-        dest_dicts = dest_client.get_all("entity/customentity")
-    except RuntimeError as exc:
-        log.error(
-            "customentity lug'atlari ro'yxati olinmadi: %s — '%s' nomli lug'at DEST'da "
-            "allaqachon mavjud (nom to'qnashuvi xatosi), lekin uni topib bo'lmadi.",
-            exc,
-            dict_name,
-        )
-        return None
-    return next((d for d in dest_dicts if d["name"] == dict_name), None)
+    """"entity/customentity" ro'yxatini turlicha (limit/offset bilan va
+    ularsiz) so'rab, nomi bo'yicha lug'atni qidiradi. Faqat
+    get_or_create_customentity_dict_by_name lug'at ALLAQACHON DEST'da
+    mavjudligini (nom to'qnashuvi xatosi orqali) aniqlagandan keyingina
+    chaqiriladi."""
+    attempts = (
+        lambda: dest_client.get_all("entity/customentity"),
+        lambda: _as_list(dest_client.get("entity/customentity")),
+    )
+    last_exc = None
+    for attempt in attempts:
+        try:
+            dest_dicts = attempt()
+        except RuntimeError as exc:
+            last_exc = exc
+            continue
+        found = next((d for d in dest_dicts if d.get("name") == dict_name), None)
+        if found:
+            return found
+    log.error(
+        "customentity lug'atlari ro'yxati olinmadi (%s) — '%s' nomli lug'at DEST'da "
+        "allaqachon mavjud (nom to'qnashuvi xatosi), lekin uni topib bo'lmadi.",
+        last_exc,
+        dict_name,
+    )
+    return None
+
+
+def _as_list(data) -> list:
+    if isinstance(data, list):
+        return data
+    return data.get("rows", []) if isinstance(data, dict) else []
 
 
 def get_or_create_customentity_element_by_name(dest_client, dest_dict: dict, element_name: str, maps: dict):
@@ -153,7 +170,19 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
         if existing:
             attr_map[attr["id"]] = existing
             if attr_type == "customentity":
-                _register_attribute_dict(source_client, dest_client, attr, maps, dest_attr=existing)
+                try:
+                    _register_attribute_dict(source_client, dest_client, attr, maps, dest_attr=existing)
+                except RuntimeError as exc:
+                    # Bitta buzilgan/hal qilib bo'lmaydigan customentity lug'ati
+                    # butun hujjat turini (yuzlab hujjatni) migratsiyadan
+                    # chetlatmasligi kerak — shu fieldni o'tkazib yuboramiz,
+                    # hujjatning o'zi va boshqa fieldlari baribir ko'chiriladi.
+                    log.error(
+                        "Custom field lug'ati aniqlanmadi: %s: %s — bu field qiymatlari "
+                        "ko'chirilmaydi, lekin hujjatning o'zi ko'chiriladi",
+                        attr["name"],
+                        exc,
+                    )
             continue
 
         payload = {
@@ -165,7 +194,16 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
             payload["showOnUi"] = attr["showOnUi"]
 
         if attr_type == "customentity":
-            dest_dict = _register_attribute_dict(source_client, dest_client, attr, maps)
+            try:
+                dest_dict = _register_attribute_dict(source_client, dest_client, attr, maps)
+            except RuntimeError as exc:
+                log.error(
+                    "Custom field lug'ati aniqlanmadi: %s: %s — bu field o'tkazib yuborildi, "
+                    "hujjatning o'zi baribir ko'chiriladi",
+                    attr["name"],
+                    exc,
+                )
+                continue
             payload["customEntityMeta"] = dest_dict["meta"]
 
         try:

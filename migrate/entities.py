@@ -62,6 +62,11 @@ _PRODUCT_LIKE_STRIP = {"code"}  # "code" (artikul) akkaunt bo'yicha yagona bo'li
 # shart, lekin manba ma'lumotida ko'plab mahsulotlar bo'sh yoki takrorlangan
 # "code"ga ega bo'lishi mumkin — shuning uchun uni ko'chirmaymiz.
 EXTRA_STRIP = {
+    # "system" — valyuta MoySklad tomonidan "tizim" (standart, masalan RUB)
+    # valyutasi deb belgilanganini bildiradi; bu o'qish-uchun-mo'ljallangan
+    # (read-only) maydon — uni PUT/POST orqali o'zgartirishga urinish
+    # "поле 'system' не может быть изменено" (3001) xatosini beradi.
+    "currency": {"system"},
     "product": _PRODUCT_LIKE_STRIP,
     "service": _PRODUCT_LIKE_STRIP,
     "variant": _PRODUCT_LIKE_STRIP,
