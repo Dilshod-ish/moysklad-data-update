@@ -96,14 +96,17 @@ def get_or_create_customentity_dict_by_name(dest_client, dict_name: str, maps: d
 
 
 def _find_customentity_dict_by_name(dest_client, dict_name: str):
-    """"entity/customentity" ro'yxatini turlicha (limit/offset bilan va
-    ularsiz) so'rab, nomi bo'yicha lug'atni qidiradi. Faqat
+    """"entity/customentity" ro'yxatini bir necha xil usulda (limit/offset
+    bilan, ularsiz, nom bo'yicha filter bilan, metadata orqali) so'rab,
+    nomi bo'yicha lug'atni qidiradi. Faqat
     get_or_create_customentity_dict_by_name lug'at ALLAQACHON DEST'da
     mavjudligini (nom to'qnashuvi xatosi orqali) aniqlagandan keyingina
     chaqiriladi."""
     attempts = (
         lambda: dest_client.get_all("entity/customentity"),
         lambda: _as_list(dest_client.get("entity/customentity")),
+        lambda: _as_list(dest_client.get("entity/customentity", params={"filter": f"name={dict_name}"})),
+        lambda: _as_list(dest_client.get("entity/customentity/metadata")),
     )
     last_exc = None
     for attempt in attempts:
@@ -117,8 +120,13 @@ def _find_customentity_dict_by_name(dest_client, dict_name: str):
             return found
     log.error(
         "customentity lug'atlari ro'yxati olinmadi (%s) — '%s' nomli lug'at DEST'da "
-        "allaqachon mavjud (nom to'qnashuvi xatosi), lekin uni topib bo'lmadi.",
+        "allaqachon mavjud (nom to'qnashuvi xatosi), lekin uni API orqali topib "
+        "bo'lmadi. TUZATISH: MoySklad'da DEST bazaga kiring -> Sozlamalar -> "
+        "Пользовательские справочники -> '%s' nomli (bo'sh/ishlatilmagan) "
+        "lug'atni toping va o'chiring, so'ng skriptni qayta ishga tushiring — "
+        "shunda u avtomatik, to'g'ri elementlari bilan qayta yaratiladi.",
         last_exc,
+        dict_name,
         dict_name,
     )
     return None
