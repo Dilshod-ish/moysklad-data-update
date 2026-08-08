@@ -138,6 +138,19 @@ def _as_list(data) -> list:
     return data.get("rows", []) if isinstance(data, dict) else []
 
 
+def _customentity_meta_for_attribute(dest_client, dest_dict: dict) -> dict:
+    """Attribute'ning customEntityMeta maydoni uchun to'g'ri shakldagi meta
+    quradi. customentity lug'atining o'zini yaratish/topishda qaytadigan
+    "meta" (elementlar ro'yxati uchun, ".../entity/customentity/{id}")
+    attribute yaratishda ISHLATIB BO'LMAYDI — MoySklad "Ошибка формата:
+    неправильное значение href для meta поля 'customEntityMeta'" (2013)
+    xatosini beradi. Attribute buni faqat
+    ".../entity/customentity/{id}/metadata" ko'rinishida qabul qiladi."""
+    dict_id = dest_dict["id"]
+    href = f"{dest_client.base_url}/entity/customentity/{dict_id}/metadata"
+    return {"href": href, "type": "customentity", "mediaType": "application/json"}
+
+
 def get_or_create_customentity_element_by_name(dest_client, dest_dict: dict, element_name: str, maps: dict):
     """dest_dict ichida nomi bo'yicha elementni topadi yoki yaratadi.
     Manba elementining ID'si noma'lum bo'lgan (havolasi buzilgan)
@@ -212,7 +225,7 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
                     exc,
                 )
                 continue
-            payload["customEntityMeta"] = dest_dict["meta"]
+            payload["customEntityMeta"] = _customentity_meta_for_attribute(dest_client, dest_dict)
 
         try:
             created_attr = dest_client.post(path, payload)
