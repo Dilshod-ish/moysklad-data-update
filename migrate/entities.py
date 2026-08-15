@@ -35,9 +35,12 @@ ENTITY_TYPES = [
     {"key": "project", "path": "entity/project"},
     {"key": "contract", "path": "entity/contract", "has_attributes": True},
     {"key": "product", "path": "entity/product", "has_attributes": True},
-    {"key": "service", "path": "entity/service", "has_attributes": True},
+    # "service" va "bundle" uchun MoySklad custom field (dopolnitelnoe pole)
+    # metadata endpointini qo'llab-quvvatlamaydi ("Неопознанный путь", 1002) —
+    # shuning uchun bu ikkisi uchun has_attributes o'rnatilmagan.
+    {"key": "service", "path": "entity/service"},
     {"key": "variant", "path": "entity/variant"},
-    {"key": "bundle", "path": "entity/bundle", "has_attributes": True},
+    {"key": "bundle", "path": "entity/bundle"},
 ]
 
 # Bular hisoblanadigan (read-only) yoki akkauntga xos tizim maydonlari —
@@ -129,6 +132,27 @@ def prepare_item(item: dict, entity_type: str, maps: dict, dest_client=None) -> 
         new_attrs = resolve_attribute_values(attrs, entity_type, maps, dest_client=dest_client)
         if new_attrs:
             resolved["attributes"] = new_attrs
+
+    # MoySklad har bir salePrices yozuvida "priceType" bo'lishini talab
+    # qiladi. Agar manbadagi narx turi kompaniya sozlamalaridan o'chirilgan
+    # bo'lsa (orphaned/eskirgan), resolve_refs uni hal qila olmay, butun
+    # "priceType" kalitini tashlab yuboradi — natijada MoySklad "поле
+    # 'priceType' не может быть пустым" xatosini berib, BUTUN mahsulotni
+    # rad etadi. Shuning uchun bunday chala qolgan narx yozuvlarini
+    # (mahsulotning o'zi emas) chetlab o'tamiz.
+    sale_prices = resolved.get("salePrices")
+    if isinstance(sale_prices, list):
+        valid_prices = [sp for sp in sale_prices if isinstance(sp, dict) and "priceType" in sp]
+        dropped = len(sale_prices) - len(valid_prices)
+        if dropped:
+            log.warning(
+                "%s (%s): %d ta narx (salePrices) o'tkazib yuborildi — narx turi "
+                "manbada o'chirilgan/topilmadi",
+                entity_type,
+                item.get("name", item.get("id")),
+                dropped,
+            )
+        resolved["salePrices"] = valid_prices
 
     return resolved
 
@@ -234,7 +258,19 @@ def migrate_entity_type(
     dest_by_name = {d["name"]: d for d in dest_items if d.get("name")} if match_by_name else {}
 
     if cfg.get("has_attributes") and not dry_run:
-        migrate_attributes(source_client, dest_client, key, maps)
+        try:
+            migrate_attributes(source_client, dest_client, key, maps)
+        except RuntimeError as exc:
+            # Custom field (attribute) sinxronizatsiyasidagi xato butun
+            # turning haqiqiy ma'lumotlarini (o'zini) ko'chirishga
+            # to'sqinlik qilmasligi kerak — masalan ba'zi turlar
+            # (service, bundle) custom fieldlarni umuman qo'llab-
+            # quvvatlamaydi ("Неопознанный путь").
+            log.error(
+                "%s: custom fieldlar sinxronlanmadi (%s) — elementlarning o'zi baribir ko'chiriladi",
+                key,
+                exc,
+            )
 
     # dest_by_source: shu turdagi barcha manba elementlariga mos maqsad
     # obyektlar (avvaldan mavjud + shu safar yaratilganlar birga) — bular

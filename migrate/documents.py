@@ -134,9 +134,28 @@ def migrate_document_type(
     log.info("=== hujjat: %s ===", key)
 
     if not dry_run:
-        migrate_states(source_client, dest_client, key, maps, dry_run=dry_run)
+        # Holat (status) yoki custom field sinxronizatsiyasidagi xato
+        # (masalan ba'zi hujjat turlari uchun MoySklad holatlarni
+        # tahrirlashni qo'llab-quvvatlamaydi — "Редактирование объектов
+        # типа 'metadata' не поддерживается") butun hujjat turining
+        # HAQIQIY hujjatlarini ko'chirishga to'sqinlik qilmasligi kerak.
+        try:
+            migrate_states(source_client, dest_client, key, maps, dry_run=dry_run)
+        except RuntimeError as exc:
+            log.error(
+                "%s: holatlar (status) sinxronlanmadi (%s) — hujjatlarning o'zi baribir ko'chiriladi",
+                key,
+                exc,
+            )
         if cfg.get("has_attributes"):
-            migrate_attributes(source_client, dest_client, key, maps)
+            try:
+                migrate_attributes(source_client, dest_client, key, maps)
+            except RuntimeError as exc:
+                log.error(
+                    "%s: custom fieldlar sinxronlanmadi (%s) — hujjatlarning o'zi baribir ko'chiriladi",
+                    key,
+                    exc,
+                )
 
     source_items = source_client.get_all(path)
     log.info("%s: manbada %d ta hujjat topildi", key, len(source_items))
