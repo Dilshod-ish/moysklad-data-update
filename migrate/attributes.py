@@ -1,6 +1,8 @@
 import logging
 import re
 
+from .mapper import parse_meta_href
+
 log = logging.getLogger("moysklad.attributes")
 
 # Bu turdagi custom fieldlar migratsiya qilinmaydi: "file" qiymati binar fayl
@@ -288,20 +290,38 @@ def resolve_attribute_values(attrs: list, entity_type: str, maps: dict, dest_cli
         if isinstance(value, dict) and "meta" in value:
             vhref = (value.get("meta") or {}).get("href", "")
             dm = _RE_CUSTOMENTITY_VALUE.search(vhref)
-            new_val = maps["customentity"].get(dm.group(1), {}).get(dm.group(2)) if dm else None
-
-            if new_val:
-                value = {"meta": new_val["meta"], "name": value.get("name")}
+            if dm:
+                new_val = maps["customentity"].get(dm.group(1), {}).get(dm.group(2))
+                if new_val:
+                    value = {"meta": new_val["meta"], "name": value.get("name")}
+                else:
+                    # Qiymatning havolasi buzilgan yoki topilmadi — lekin
+                    # ko'rinadigan nomi (value.name) hali ham mavjud
+                    # bo'lishi mumkin. Shu nom bo'yicha maqsad lug'atdan
+                    # mos elementni topamiz/yaratamiz.
+                    elem_name = value.get("name")
+                    dest_dict = maps["attribute_dict"].get(attr_id)
+                    if not elem_name or not dest_dict or not dest_client:
+                        continue
+                    dest_elem = get_or_create_customentity_element_by_name(dest_client, dest_dict, elem_name, maps)
+                    value = {"meta": dest_elem["meta"], "name": elem_name}
             else:
-                # Qiymatning havolasi buzilgan yoki topilmadi — lekin ko'rinadigan
-                # nomi (value.name) hali ham mavjud bo'lishi mumkin. Shu nom
-                # bo'yicha maqsad lug'atdan mos elementni topamiz/yaratamiz.
-                elem_name = value.get("name")
-                dest_dict = maps["attribute_dict"].get(attr_id)
-                if not elem_name or not dest_dict or not dest_client:
+                # customentity emas — custom fieldning boshqa turlari
+                # (masalan "employee", "counterparty", "project" kabi)
+                # boshqa oddiy obyektga ishora qilishi mumkin. Bunday
+                # qiymatlarni oddiy maydonlar kabi maps["entity"] orqali
+                # hal qilamiz — aks holda ular butunlay tashlab
+                # yuborilib, agar field "required" bo'lsa, MoySklad
+                # butun hujjatni rad etardi.
+                parsed = parse_meta_href(vhref)
+                new_ref = (
+                    maps["entity"].get(parsed[1], {}).get(parsed[2])
+                    if parsed and parsed[0] == "entity"
+                    else None
+                )
+                if not new_ref:
                     continue
-                dest_elem = get_or_create_customentity_element_by_name(dest_client, dest_dict, elem_name, maps)
-                value = {"meta": dest_elem["meta"], "name": elem_name}
+                value = {"meta": new_ref["meta"], "name": value.get("name")}
 
         result.append({"meta": new_attr["meta"], "value": value})
     return result
