@@ -172,6 +172,28 @@ def get_or_create_customentity_element_by_name(dest_client, dest_dict: dict, ele
     return created
 
 
+def get_or_create_employee_by_name(dest_client, name: str, maps: dict):
+    """Nomi bo'yicha DEST'dagi xodimni topadi yoki (login/parolsiz, faqat
+    nom bilan) yaratadi. Manba ro'yxatida topilmagan (masalan
+    arxivlangan/o'chirilgan) xodimlarga custom field orqali havola qilish
+    kerak bo'lganda ishlatiladi — bunday xodimga tizimga kirish imkoni
+    berilmaydi, faqat hujjatlarda ko'rinadigan yozuv sifatida yaratiladi."""
+    by_name = maps.setdefault("entity_by_name", {})
+    cache = by_name.get("employee")
+    if cache is None:
+        employees = dest_client.get_all("entity/employee")
+        cache = {e["name"]: e for e in employees}
+        by_name["employee"] = cache
+
+    existing = cache.get(name)
+    if existing:
+        return existing
+
+    created = dest_client.post("entity/employee", {"name": name})
+    cache[name] = created
+    return created
+
+
 def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict):
     """entity_type uchun custom field (dopolnitelnoe pole) ta'riflarini
     manbadan maqsad bazaga ko'chiradi, id_map["attribute"][entity_type] ni to'ldiradi."""
@@ -320,7 +342,25 @@ def resolve_attribute_values(attrs: list, entity_type: str, maps: dict, dest_cli
                     else None
                 )
                 if not new_ref:
-                    continue
+                    elem_name = value.get("name")
+                    # "employee" turidagi havola manba ro'yxatida topilmadi
+                    # (masalan xodim keyinchalik arxivlangan/o'chirilgan
+                    # bo'lishi mumkin) — bo'sh qoldirish o'rniga, nomi
+                    # bo'yicha DEST'da mos xodimni topamiz yoki yaratamiz
+                    # (login/parolsiz, faqat nom bilan — bu boshqa
+                    # hujjatlarga bog'lash uchun yetarli).
+                    if attr.get("type") == "employee" and elem_name and dest_client:
+                        new_ref = get_or_create_employee_by_name(dest_client, elem_name, maps)
+                    if not new_ref:
+                        log.warning(
+                            "Custom field qiymati bog'lanmadi: %s (turi=%s, manba id=%s, "
+                            "ko'rinadigan nomi=%r) — qiymat o'tkazib yuborildi",
+                            attr.get("name") or new_attr.get("name"),
+                            attr.get("type"),
+                            parsed[2] if parsed else None,
+                            elem_name,
+                        )
+                        continue
                 value = {"meta": new_ref["meta"], "name": value.get("name")}
 
         result.append({"meta": new_attr["meta"], "value": value})

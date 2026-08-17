@@ -22,7 +22,7 @@ ENTITY_TYPES = [
     {"key": "currency", "path": "entity/currency", "match_by_name": True},
     {"key": "group", "path": "entity/group", "match_by_name": True},
     {"key": "expenseitem", "path": "entity/expenseitem", "match_by_name": True},
-    {"key": "employee", "path": "entity/employee", "match_by_name": True},
+    {"key": "employee", "path": "entity/employee", "match_by_name": True, "include_archived": True},
     {"key": "organization", "path": "entity/organization", "sub_resources": ["accounts"]},
     {"key": "productfolder", "path": "entity/productfolder", "self_referential": True},
     {"key": "store", "path": "entity/store", "match_by_name": True},
@@ -94,6 +94,7 @@ NESTED_STRIP = {
 def build_maps() -> dict:
     return {
         "entity": {},
+        "entity_by_name": {},
         "attribute": {},
         "attribute_dict": {},
         "customentity": {},
@@ -246,6 +247,14 @@ def migrate_entity_type(
     log.info("=== %s ===", key)
 
     source_items = source_client.get_all(path)
+    if cfg.get("include_archived"):
+        # Ba'zi elementlar (masalan arxivlangan/ishdan bo'shatilgan
+        # xodimlar) standart ro'yxatda ko'rinmasligi mumkin, lekin eski
+        # hujjatlarning custom fieldlari hali ham ularga ishora qilishi
+        # mumkin — shuning uchun arxivlanganlarni ham qo'shib olamiz.
+        archived = source_client.get_all(path, params={"filter": "archived=true"})
+        seen_ids = {it["id"] for it in source_items}
+        source_items.extend(it for it in archived if it["id"] not in seen_ids)
     log.info("%s: manbada %d ta element topildi", key, len(source_items))
 
     id_map = maps["entity"].setdefault(key, {})
