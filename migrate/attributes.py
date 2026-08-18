@@ -214,6 +214,17 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
         existing = dest_by_name.get(attr["name"])
         if existing:
             attr_map[attr["id"]] = existing
+            if existing.get("required"):
+                # Oldingi ishga tushirishda (tuzatishdan oldin) "required:
+                # True" bilan yaratilgan bo'lishi mumkin — buni ham
+                # "False" ga qaytaramiz, aks holda qiymati yo'q eski
+                # hujjatlar hamon rad etilaveradi.
+                try:
+                    updated = dest_client.put(f"{path}/{existing['id']}", {"required": False})
+                    existing["required"] = False
+                    attr_map[attr["id"]] = updated
+                except RuntimeError as exc:
+                    log.error("Custom field 'required' bayrog'i o'zgartirilmadi: %s: %s", attr["name"], exc)
             if attr_type == "customentity":
                 try:
                     _register_attribute_dict(source_client, dest_client, attr, maps, dest_attr=existing)
@@ -233,7 +244,17 @@ def migrate_attributes(source_client, dest_client, entity_type: str, maps: dict)
         payload = {
             "name": attr["name"],
             "type": attr_type,
-            "required": attr.get("required", False),
+            # Manbada "required" bo'lsa ham, DEST'da ATAYIN "required: False"
+            # qilib yaratamiz. Sabab: ba'zi eski hujjatlarda bu maydon
+            # (masalan field keyinchalik majburiy qilib qo'yilgani yoki
+            # boshqa sabab bilan) umuman to'ldirilmagan — qiymat shunchaki
+            # yo'q, buzilgan havola emas (hech qanday xarita orqali
+            # tiklab bo'lmaydi). Agar DEST'da ham "required: True" qilsak,
+            # MoySklad API orqali yaratishda BUNDAY har bir tarixiy
+            # hujjatni butunlay rad etadi ("поле ... не может быть
+            # пустым"), garchi u manbada haqiqiy, tasdiqlangan yozuv
+            # bo'lsa ham.
+            "required": False,
         }
         if "showOnUi" in attr:
             payload["showOnUi"] = attr["showOnUi"]
